@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# 환경변수
+.env
+*.pem
+*.key
+
+# IDE
+.vscode/
+.idea/
+
+# Docker
+*.log
+
+# k8s secrets
+k8s/**/secret.yaml
