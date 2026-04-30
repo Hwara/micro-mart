@@ -18,7 +18,6 @@ Grafana에서 로그 -> 트레이스로 바로 이동(drilldown)할 수 있게 �
 """
 
 import logging
-import sys
 from typing import Any
 
 import structlog
@@ -39,7 +38,7 @@ def _add_otel_context(logger: Any, method: str, event_dict: dict) -> dict:
 
     # 유효한 Span이 있을 때만 컨텍스트 주입
     # Span이 없는 백그라운드 작업 등에서는 건너뛰기
-    if span_context.is_vaild:
+    if span_context.is_valid:
         # trace_id를 32자리 165진수 문자열로 변환
         event_dict["trace_id"] = format(span_context.trace_id, "032x")
         event_dict["span_id"] = format(span_context.trace_id, "016x")
@@ -66,7 +65,6 @@ def init_logging(service_name: str, log_format: str = "pretty") -> None:
     # 5. 스택 트레이스 포맷팅 (예외 발생 시)
     shared_processors = [
         structlog.stdlib.add_log_level,
-        structlog.stdlib.add_logger_name,
         structlog.processors.TimeStamper(fmt="iso"),
         structlog.contextvars.merge_contextvars,
         _add_otel_context,
@@ -90,7 +88,7 @@ def init_logging(service_name: str, log_format: str = "pretty") -> None:
         processors=processors,
         wrapper_class=structlog.make_filtering_bound_logger(logging.DEBUG),
         context_class=dict,
-        logger_factory=structlog.PrintLoggerFactory(file=sys.stdout),
+        logger_factory=structlog.PrintLoggerFactory(),
         cache_logger_on_first_use=True,
     )
 
