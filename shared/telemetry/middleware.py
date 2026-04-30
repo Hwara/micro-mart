@@ -39,7 +39,17 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
         )
 
         # 다음 미들웨어 또는 라우터로 요청 전달
-        response = await call_next(request)
+        try:
+            response = await call_next(request)
+        except Exception:
+            duration_ms = (time.perf_counter() - start_time) * 1000
+            logger.exception(
+                "요청 실패",
+                method=request.method,
+                path=request.url.path,
+                duration_ms=round(duration_ms, 2),
+            )
+            raise
 
         # 처리 시간 계산 (밀리초)
         duration_ms = (time.perf_counter() - start_time) * 1000
