@@ -66,7 +66,7 @@ def init_telemetry(
     resource = Resource.create(
         {
             "service.name": service_name,
-            "service.version": "settings.service_version",
+            "service.version": settings.service_version,
         }
     )
 

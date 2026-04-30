@@ -41,7 +41,7 @@ def _add_otel_context(logger: Any, method: str, event_dict: dict) -> dict:
     if span_context.is_valid:
         # trace_id를 32자리 165진수 문자열로 변환
         event_dict["trace_id"] = format(span_context.trace_id, "032x")
-        event_dict["span_id"] = format(span_context.trace_id, "016x")
+        event_dict["span_id"] = format(span_context.span_id, "016x")
 
     return event_dict
 
