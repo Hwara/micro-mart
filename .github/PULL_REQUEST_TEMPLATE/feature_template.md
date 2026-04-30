@@ -8,7 +8,7 @@ ex) feat/login -> dev
 
 ### 변경 사항
 
-#이슈번호 or JIRA ID
+이슈번호 or JIRA ID
 
 ### 테스트 결과
 
