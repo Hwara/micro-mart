@@ -2,6 +2,7 @@
 fastapi>=0.111.0
 uvicorn[standard]>=0.29.0
 pydantic-settings>=2.2.0
+pydantic[email]
 sqlalchemy[asyncio]>=2.0.0
 asyncpg>=0.29.0
 httpx>=0.27.0
@@ -18,7 +19,9 @@ python-jose[cryptography]>=3.3.0
 
 # 비밀번호 해싱
 passlib[bcrypt]>=1.7.4
-bcrypt>=4.0.0
+
+# 4.1.x 이상 버전에서는 버그 발생을 확인하여 다운그레이드
+bcrypt==4.0.1
 
 # Redis (Refresh Token 저장)
 redis[asyncio]>=5.0.0
