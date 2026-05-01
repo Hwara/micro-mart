@@ -10,7 +10,7 @@ from fastapi import FastAPI
 from shared.telemetry import RequestLoggingMiddleware, init_logging, init_telemetry
 
 from .config import get_settings
-from .database import engine
+from .database import engine, redis_client
 from .models import Base
 from .routes import auth as auth_router
 
@@ -39,8 +39,10 @@ async def lifespan(app: FastAPI):
     yield
 
     # ── 종료 시 ──
-    logger.info("user-service 종료")
+    logger.info("user-service 종료 시작")
     await engine.dispose()
+    await redis_client.aclose()
+    logger.info("user-service 종료 완료")
 
 
 app = FastAPI(
