@@ -56,6 +56,10 @@ def init_logging(service_name: str, log_format: str = "pretty") -> None:
                         "json"      (운영/Docker, Loki 수집용)
     """
 
+    # log_format 검증
+    if log_format not in {"pretty", "json"}:
+        raise ValueError("log_format must be one of: 'pretty', 'json'")
+
     # 공통 프로세서 체인
     # 로그 하나가 출력되기까지 아래 순서대로 변환
     # 1. 타임스탬프 추가
