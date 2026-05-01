@@ -12,6 +12,7 @@ import structlog
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError
+from opentelemetry import metrics
 from pydantic import BaseModel, EmailStr
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -24,6 +25,32 @@ logger = structlog.get_logger(__name__)
 router = APIRouter(prefix="/auth", tags=["auth"])
 settings = get_settings()
 security = HTTPBearer()
+
+
+# ── 메트릭 정의 ──────────────────────────────────────────────────
+# meter: 이 서비스에서 메트릭을 발행하는 주체
+# get_meter()는 MeterProvider에 등록된 전역 인스턴스를 반환
+# init_telemetry()가 먼저 호출된 이후에 정상 동작합니다
+meter = metrics.get_meter("user-service")
+
+login_total = meter.create_counter(
+    name="login_total",
+    description="로그인 시도 횟수",
+    unit="1",
+    # unit="1": 단위 없는 카운트를 의미하는 OTel 표준 표기
+)
+
+register_total = meter.create_counter(
+    name="register_total",
+    description="신규 회원가입 횟수",
+    unit="1",
+)
+
+token_refresh_total = meter.create_counter(
+    name="token_refresh_total",
+    description="Access Token 재발급 횟수",
+    unit="1",
+)
 
 
 # ── 요청/응답 스키마 ──────────────────────
@@ -75,6 +102,8 @@ async def register(
     db.add(user)
     await db.flush()  # ID를 얻기 위해 flush (커밋은 get_db에서 자동)
 
+    # 가입 완료 시점에 카운터 증가
+    register_total.add(1)
     logger.info("신규 회원가입", user_id=user.id, email=user.email)
     return {"user_id": user.id, "email": user.email}
 
@@ -87,6 +116,8 @@ async def login(
     # 사용자 조회 + 비밀번호 검증
     user = await auth_service.get_user_by_email(db, body.email)
     if not user or not auth_service.verify_password(body.password, user.hashed_password):
+        # 실패 카운터: result="fail" 레이블로 성공과 구분
+        login_total.add(1, {"result": "fail"})
         logger.warning("로그인 실패 - 잘못된 자격증명", email=body.email)
         # 보안: "이메일이 없음"과 "비밀번호 틀림"을 구분하지 않음
         # 구분하면 공격자가 유효한 이메일 목록을 수집할 수 있음
@@ -96,6 +127,8 @@ async def login(
         )
 
     if not user.is_active:
+        # 비활성 계정도 실패로 분류하되 이유를 별도 레이블로 기록
+        login_total.add(1, {"result": "fail_inactive"})
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="비활성화된 계정입니다.",
@@ -104,6 +137,8 @@ async def login(
     access_token = auth_service.create_access_token(user)
     refresh_token = await auth_service.create_refresh_token(redis_client, user.id, body.device)
 
+    # 성공 카운터
+    login_total.add(1, {"result": "success"})
     logger.info("로그인 성공", user_id=user.id)
     return TokenResponse(access_token=access_token, refresh_token=refresh_token)
 
@@ -143,6 +178,8 @@ async def refresh(
         redis_client, body.user_id, body.device
     )
 
+    # 재발급 완료 시점에 카운터 증가
+    token_refresh_total.add(1)
     logger.info("토큰 재발급 완료", user_id=user.id)
     return TokenResponse(access_token=new_access_token, refresh_token=new_refresh_token)
 
