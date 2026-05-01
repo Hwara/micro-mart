@@ -61,6 +61,10 @@ class Settings(BaseSettings):
             with open(self.jwt_public_key_file) as f:
                 self.jwt_public_key = f.read()
 
+        if not self.jwt_private_key or not self.jwt_public_key:
+            raise ValueError(
+                "JWT 키가 설정되지 않았습니다. jwt_*_key 또는 jwt_*_key_file을 설정하세요."
+            )
         return self
 
 
