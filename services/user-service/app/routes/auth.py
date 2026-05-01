@@ -74,7 +74,6 @@ class TokenResponse(BaseModel):
 
 
 class RefreshRequest(BaseModel):
-    user_id: int
     refresh_token: str
     device: str = "web"
 
@@ -148,35 +147,45 @@ async def refresh(
     body: RefreshRequest,
     db: AsyncSession = Depends(get_db),
 ):
-    # Refresh Token 유효성 검증
-    is_valid = await auth_service.verify_refresh_token(
-        redis_client, body.user_id, body.refresh_token, body.device
-    )
+    # 클라이언트가 보낸 user_id 대신, 토큰에서 직접 추출
+    result = await auth_service.get_user_id_from_refresh_token(redis_client, body.refresh_token)
 
-    if not is_valid:
-        # 이미 삭제된 토큰으로 접근 = Refresh Token 재사용 시도
-        # 모든 세션을 즉시 강제 종료
-        logger.warning(
-            "Refresh Token 재사용 감지 — 전체 세션 강제 종료",
-            user_id=body.user_id,
-        )
-        await auth_service.revoke_all_refresh_tokens(redis_client, body.user_id)
+    if result is None:
+        # 존재하지 않는 토큰 = 이미 삭제됐거나 위조된 토큰
+        logger.warning("유효하지 않은 Refresh Token 접근 시도")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="유효하지 않은 Refresh Token입니다.",
         )
 
-    user = await auth_service.get_user_by_id(db, body.user_id)
+    user_id, device = result
+
+    is_valid = await auth_service.verify_refresh_token(
+        redis_client, user_id, body.refresh_token, device
+    )
+
+    if not is_valid:
+        # 역조회는 성공했지만 값이 다른 경우 = 재사용 감지
+        # 모든 세션을 즉시 강제 종료
+        logger.warning(
+            "Refresh Token 재사용 감지 — 전체 세션 강제 종료",
+            user_id=user_id,
+        )
+        await auth_service.revoke_all_refresh_tokens(redis_client, user_id)
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="유효하지 않은 Refresh Token입니다.",
+        )
+
+    user = await auth_service.get_user_by_id(db, user_id)
     if not user or not user.is_active:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
 
     # Refresh Token Rotation: 기존 토큰 삭제 후 새 토큰 발급
     # 같은 Refresh Token을 재사용하지 못하게 막는 핵심 메커니즘
-    await auth_service.revoke_refresh_token(redis_client, body.user_id, body.device)
+    await auth_service.revoke_refresh_token(redis_client, user_id, body.device)
     new_access_token = auth_service.create_access_token(user)
-    new_refresh_token = await auth_service.create_refresh_token(
-        redis_client, body.user_id, body.device
-    )
+    new_refresh_token = await auth_service.create_refresh_token(redis_client, user_id, body.device)
 
     # 재발급 완료 시점에 카운터 증가
     token_refresh_total.add(1)

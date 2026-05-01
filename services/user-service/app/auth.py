@@ -108,12 +108,28 @@ async def create_refresh_token(
     Refresh Token 자체는 단순한 UUID입니다.
     진짜 검증은 Redis에 저장된 값과 비교하는 방식입니다.
     (JWT 형식이 아닌 이유: 서버 측에서 즉시 무효화가 가능해야 하기 때문)
+
+    토큰을 통해 인증된 user_id를 역조회를 위한 키 추가
     """
     token = str(uuid.uuid4())
     key = _refresh_token_key(user_id, device)
+    reverse_key = f"refresh:token:{token}"  # 역조회용 키 추가
     expire_seconds = settings.refresh_token_expire_days * 24 * 60 * 60
 
-    await redis.setex(key, expire_seconds, token)
+    # 기존 토큰의 역방향 키 정리
+    # 같은 기기로 재로그인 시 이전 역방향 키가 고아로 남는 것을 방지
+    existing_token = await redis.get(key)
+
+    # 두 키를 원자적으로 저장
+    async with redis.pipeline() as pipe:
+        # 기존 역방향 키 삭제 (존재하는 경우에만)
+        if existing_token:
+            pipe.delete(f"refresh:token:{existing_token}")
+
+        # 새 정방향 + 역방향 키 저장
+        pipe.setex(key, expire_seconds, token)
+        pipe.setex(reverse_key, expire_seconds, f"{user_id}:{device}")
+        await pipe.execute()
     return token
 
 
@@ -144,9 +160,15 @@ async def revoke_refresh_token(
     user_id: int,
     device: str = "web",
 ) -> None:
-    """특정 기기의 Refresh Token 삭제 (로그아웃)"""
+    """로그아웃: 정방향 + 역방향 키 모두 삭제"""
     key = _refresh_token_key(user_id, device)
-    await redis.delete(key)
+    stored_token = await redis.get(key)
+
+    async with redis.pipeline() as pipe:
+        pipe.delete(key)
+        if stored_token:
+            pipe.delete(f"refresh:token:{stored_token}")
+        await pipe.execute()
 
 
 async def revoke_all_refresh_tokens(
@@ -155,21 +177,29 @@ async def revoke_all_refresh_tokens(
 ) -> None:
     """
     해당 사용자의 모든 기기 Refresh Token 삭제
-
-    사용 시점:
-    - 비밀번호 변경
-    - 계정 강제 차단
-    - Refresh Token 재사용 감지
+    정방향 키(refresh:user:{id}:{device})와
+    역방향 키(refresh:token:{value}) 모두 삭제합니다.
     """
-    # SCAN으로 패턴 매칭하여 모든 기기 토큰 키 탐색
-    # KEYS 명령은 운영 환경에서 블로킹 위험이 있어 SCAN 사용
     pattern = f"refresh:user:{user_id}:*"
-    keys = []
-    async for key in redis.scan_iter(pattern):
-        keys.append(key)
+    forward_keys = []
+    token_values = []
 
-    if keys:
-        await redis.delete(*keys)
+    # 1단계: 정방향 키를 스캔하면서 토큰 값도 함께 수집
+    async for key in redis.scan_iter(pattern):
+        forward_keys.append(key)
+        token_value = await redis.get(key)
+        if token_value:
+            token_values.append(f"refresh:token:{token_value}")
+
+    if not forward_keys:
+        return
+
+    # 2단계: 정방향 + 역방향 키 한 번에 삭제 (pipeline으로 원자적 처리)
+    async with redis.pipeline() as pipe:
+        pipe.delete(*forward_keys)
+        if token_values:
+            pipe.delete(*token_values)
+        await pipe.execute()
 
 
 # ════════════════════════════════════════
@@ -185,3 +215,18 @@ async def get_user_by_email(db: AsyncSession, email: str) -> User | None:
 async def get_user_by_id(db: AsyncSession, user_id: int) -> User | None:
     result = await db.execute(select(User).where(User.id == user_id))
     return result.scalar_one_or_none()
+
+
+async def get_user_id_from_refresh_token(
+    redis: aioredis.Redis,
+    token: str,
+) -> tuple[int, str] | None:
+    """
+    토큰 값으로 (user_id, device) 역조회
+    존재하지 않으면 None 반환
+    """
+    value = await redis.get(f"refresh:token:{token}")
+    if not value:
+        return None
+    user_id_str, device = value.split(":", 1)
+    return int(user_id_str), device
