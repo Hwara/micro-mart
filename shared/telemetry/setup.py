@@ -19,6 +19,7 @@ from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from pydantic_settings import BaseSettings
+from sqlalchemy.ext.asyncio import AsyncEngine
 
 
 class TelemetrySettings(BaseSettings):
@@ -30,8 +31,8 @@ class TelemetrySettings(BaseSettings):
     # OTel Collector 주소 (기본값: 로컬 개발용)
     otel_exporter_otlp_endpoint: str = "http://localhost:4317"
 
-    # OTel TLS 적용 여부 (기본값: 로컬 개발용)
-    otel_exporter_otlp_insecure: bool = True
+    # OTel TLS 적용 여부 (기본값: 운영용 안전한 기본값)
+    otel_exporter_otlp_insecure: bool = False
 
     # 로그 출력 포맷: "json" (운영) | "pretty" (로컬 개발)
     log_format: str = "pretty"
@@ -46,7 +47,7 @@ class TelemetrySettings(BaseSettings):
 
 def init_telemetry(
     service_name: str,
-    db_engine=None,
+    db_engine: AsyncEngine | None = None,
     settings: TelemetrySettings | None = None,
 ) -> None:
     """
