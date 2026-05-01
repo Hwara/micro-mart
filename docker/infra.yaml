@@ -1,0 +1,77 @@
+# 로컬 개발용 인프라 전용 docker-compose
+# 애플리케이션 서비스 없이 DB/Redis/NATS만 실행합니다.
+#
+# 실행: docker compose -f docker/infra.yaml up -d
+# 종료: docker compose -f docker/infra.yaml down
+# 데이터 포함 완전 삭제: docker compose -f docker/infra.yaml down -v
+
+services:
+
+  # ── PostgreSQL ──────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: micromart-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-micromart}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-micromart}
+      POSTGRES_DB: ${POSTGRES_DB:-userdb}       # 기본 DB (init 스크립트로 나머지도 생성됨)
+    ports:
+      - "5432:5432"             # 호스트:컨테이너
+    volumes:
+      # named volume: 컨테이너를 내려도 데이터가 유지됩니다
+      - postgres_data:/var/lib/postgresql/data
+      # init 스크립트: 컨테이너 최초 시작 시에만 실행됩니다
+      # 이미 데이터가 있으면 재실행되지 않습니다
+      - ./init-scripts:/docker-entrypoint-initdb.d
+    healthcheck:
+      # pg_isready: PostgreSQL이 연결을 받을 준비가 됐는지 확인
+      # 앱 서비스가 DB가 준비되기 전에 시작되는 것을 방지합니다
+      test: ["CMD-SHELL", "pg_isready -U micromart -d userdb"]
+      interval: 5s      # 5초마다 확인
+      timeout: 5s       # 5초 안에 응답 없으면 실패
+      retries: 5        # 5번 실패하면 unhealthy 상태
+
+  # ── Redis ───────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: micromart-redis
+    command: >
+      redis-server
+      --appendonly yes
+      --appendfsync everysec
+    # appendonly yes: AOF(Append Only File) 방식으로 데이터 영속성 보장
+    # appendfsync everysec: 1초마다 디스크에 기록 (성능과 안전성 균형)
+    # 로컬 개발에서 Redis 재시작 후에도 Refresh Token이 유지됩니다
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # ── NATS ────────────────────────────────────────────
+  # order-service → notification-service 비동기 메시지용
+  # Phase 5(order-service)에서 사용하지만 미리 포함합니다
+  nats:
+    image: nats:2-alpine
+    container_name: micromart-nats
+    command: ["-js", "-m", "8222"]
+    # -js: JetStream 활성화 (메시지 영속성, 재전송 보장)
+    # -m 8222: 모니터링 HTTP 포트 활성화
+    ports:
+      - "4222:4222"    # NATS 클라이언트 연결 포트
+      - "8222:8222"    # 모니터링 웹 UI (http://localhost:8222)
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:8222/healthz || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local

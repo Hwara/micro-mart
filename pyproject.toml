@@ -10,6 +10,20 @@ select = [
     "UP",  # pyupgrade (Python 최신 문법 권장)
 ]
 
+[tool.ruff.lint.flake8-bugbear]
+# B008 예외: FastAPI Depends, Query, Body 등은 기본 인자로 사용하는 것이 공식 패턴
+extend-immutable-calls = [
+    "fastapi.Depends",
+    "fastapi.Query",
+    "fastapi.Body",
+    "fastapi.Header",
+    "fastapi.Path",
+    "fastapi.Cookie",
+    "fastapi.File",
+    "fastapi.Form",
+    "fastapi.Security",
+]
+
 [tool.black]
 line-length = 100
 target-version = ["py312"]
@@ -17,4 +31,8 @@ target-version = ["py312"]
 [tool.mypy]
 python_version = "3.12"
 strict = false          # 처음부터 strict하면 부담스러우니 점진적으로 적용
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "redis.*"
 ignore_missing_imports = true
