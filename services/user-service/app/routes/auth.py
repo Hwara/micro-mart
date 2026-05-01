@@ -103,7 +103,7 @@ async def register(
 
     # 가입 완료 시점에 카운터 증가
     register_total.add(1)
-    logger.info("신규 회원가입", user_id=user.id, email=user.email)
+    logger.info("신규 회원가입", user_id=user.id)
     return {"user_id": user.id, "email": user.email}
 
 
@@ -117,7 +117,7 @@ async def login(
     if not user or not auth_service.verify_password(body.password, user.hashed_password):
         # 실패 카운터: result="fail" 레이블로 성공과 구분
         login_total.add(1, {"result": "fail"})
-        logger.warning("로그인 실패 - 잘못된 자격증명", email=body.email)
+        logger.warning("로그인 실패 - 잘못된 자격증명")
         # 보안: "이메일이 없음"과 "비밀번호 틀림"을 구분하지 않음
         # 구분하면 공격자가 유효한 이메일 목록을 수집할 수 있음
         raise HTTPException(
