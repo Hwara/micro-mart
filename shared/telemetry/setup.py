@@ -30,6 +30,9 @@ class TelemetrySettings(BaseSettings):
     # OTel Collector 주소 (기본값: 로컬 개발용)
     otel_exporter_otlp_endpoint: str = "http://localhost:4317"
 
+    # OTel TLS 적용 여부 (기본값: 로컬 개발용)
+    otel_exporter_otlp_insecure: bool = True
+
     # 로그 출력 포맷: "json" (운영) | "pretty" (로컬 개발)
     log_format: str = "pretty"
 
@@ -76,7 +79,8 @@ def init_telemetry(
     # -> 네트워크 오버헤드를 줄이기 위한 표준 방식
     trace_provider = TracerProvider(resource=resource)
     otlp_span_exporter = OTLPSpanExporter(
-        endpoint=settings.otel_exporter_otlp_endpoint, insecure=True
+        endpoint=settings.otel_exporter_otlp_endpoint,
+        insecure=settings.otel_exporter_otlp_insecure,
     )
     trace_provider.add_span_processor(BatchSpanProcessor(otlp_span_exporter))
     # 전역 TracerProvider로 등록
@@ -87,7 +91,10 @@ def init_telemetry(
     # Counter, Histogram 등 메트릭을 OTel Collector로 전송
     # PeriodicExportingMetricReader: 정해진 시간마다 메트릭을 수집해서 전송
     metric_reader = PeriodicExportingMetricReader(
-        OTLPMetricExporter(endpoint=settings.otel_exporter_otlp_endpoint, insecure=True),
+        OTLPMetricExporter(
+            endpoint=settings.otel_exporter_otlp_endpoint,
+            insecure=settings.otel_exporter_otlp_insecure,
+        ),
         export_interval_millis=60000,  # 60초마다 전송
     )
     meter_provider = MeterProvider(
