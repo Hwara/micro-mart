@@ -75,7 +75,6 @@ class TokenResponse(BaseModel):
 
 class RefreshRequest(BaseModel):
     refresh_token: str
-    device: str = "web"
 
 
 # ── 엔드포인트 ────────────────────────────
@@ -158,10 +157,10 @@ async def refresh(
             detail="유효하지 않은 Refresh Token입니다.",
         )
 
-    user_id, device = result
+    user_id, token_device = result
 
     is_valid = await auth_service.verify_refresh_token(
-        redis_client, user_id, body.refresh_token, device
+        redis_client, user_id, body.refresh_token, token_device
     )
 
     if not is_valid:
@@ -183,9 +182,9 @@ async def refresh(
 
     # Refresh Token Rotation: 기존 토큰 삭제 후 새 토큰 발급
     # 같은 Refresh Token을 재사용하지 못하게 막는 핵심 메커니즘
-    await auth_service.revoke_refresh_token(redis_client, user_id, body.device)
+    await auth_service.revoke_refresh_token(redis_client, user_id, token_device)
     new_access_token = auth_service.create_access_token(user)
-    new_refresh_token = await auth_service.create_refresh_token(redis_client, user_id, body.device)
+    new_refresh_token = await auth_service.create_refresh_token(redis_client, user_id, token_device)
 
     # 재발급 완료 시점에 카운터 증가
     token_refresh_total.add(1)
