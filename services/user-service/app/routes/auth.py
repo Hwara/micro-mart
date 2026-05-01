@@ -14,6 +14,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError
 from opentelemetry import metrics
 from pydantic import BaseModel, EmailStr
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .. import auth as auth_service
@@ -89,7 +90,8 @@ async def register(
     body: RegisterRequest,
     db: AsyncSession = Depends(get_db),
 ):
-    # 이메일 중복 확인
+    # 이메일 중복 선조회는 UX 목적 (빠른 피드백)으로 유지
+    # 하지만 경쟁 조건 방어는 아래 IntegrityError 처리가 담당
     existing = await auth_service.get_user_by_email(db, body.email)
     if existing:
         raise HTTPException(
@@ -102,7 +104,16 @@ async def register(
         hashed_password=auth_service.hash_password(body.password),
     )
     db.add(user)
-    await db.flush()  # ID를 얻기 위해 flush (커밋은 get_db에서 자동)
+
+    try:
+        await db.flush()
+    except IntegrityError as e:
+        # 동시 요청으로 unique 제약 조건 위반 발생 시
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="이미 사용 중인 이메일입니다.",
+        ) from e
 
     # 가입 완료 시점에 카운터 증가
     register_total.add(1)
