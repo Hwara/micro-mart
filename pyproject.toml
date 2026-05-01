@@ -32,3 +32,7 @@ target-version = ["py312"]
 python_version = "3.12"
 strict = false          # 처음부터 strict하면 부담스러우니 점진적으로 적용
 ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "redis.*"
+ignore_missing_imports = true
