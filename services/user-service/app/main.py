@@ -31,8 +31,9 @@ async def lifespan(app: FastAPI):
     init_telemetry(service_name=settings.service_name, db_engine=engine)
 
     # DB 테이블 자동 생성 (개발용, 운영에서는 Alembic 마이그레이션 사용)
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    if settings.debug:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
 
     logger.info("user-service 시작 완료", version=settings.service_version)
     yield
