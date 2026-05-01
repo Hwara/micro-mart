@@ -9,7 +9,7 @@ GET  /auth/jwks      — 공개키 JWKS (api-gateway용)
 """
 
 import structlog
-from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError
 from opentelemetry import metrics
@@ -65,6 +65,10 @@ class LoginRequest(BaseModel):
     email: EmailStr
     password: str
     device: str = "web"  # 기기 식별자, 기본값은 "web"
+
+
+class LogoutRequest(BaseModel):
+    refresh_token: str  # 로그아웃할 세션을 특정하는 유일한 식별자
 
 
 class TokenResponse(BaseModel):
@@ -205,14 +209,36 @@ async def refresh(
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
 async def logout(
+    body: LogoutRequest,
     credentials: HTTPAuthorizationCredentials = Depends(security),
-    device: str = Header(default="web", alias="X-Device"),
 ):
+    # Access Token에서 user_id 추출 (신원 확인)
     try:
         payload = auth_service.decode_access_token(credentials.credentials)
         user_id = int(payload["sub"])
     except (JWTError, KeyError, ValueError) as e:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED) from e
+
+    # Refresh Token 역조회로 실제 device 확인
+    try:
+        result = await auth_service.get_user_id_from_refresh_token(redis_client, body.refresh_token)
+    except auth_service.TokenReusedException:
+        # 이미 회전된 토큰 → 해당 세션은 이미 무효화되어 있음
+        # 로그아웃 목적은 달성된 상태이므로 204 반환
+        logger.info("로그아웃 요청: 이미 회전된 토큰", user_id=user_id)
+        return
+
+    if result is None:
+        # 이미 만료됐거나 존재하지 않는 토큰
+        # 로그아웃 목적은 달성됐으므로 204 반환
+        return
+
+    token_user_id, device = result
+
+    # 토큰의 user_id와 Access Token의 user_id 일치 확인
+    # 타인의 Refresh Token으로 로그아웃 시도 방지
+    if token_user_id != user_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
 
     await auth_service.revoke_refresh_token(redis_client, user_id, device)
     logger.info("로그아웃 완료", user_id=user_id, device=device)
