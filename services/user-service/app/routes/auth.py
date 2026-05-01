@@ -146,8 +146,19 @@ async def refresh(
     body: RefreshRequest,
     db: AsyncSession = Depends(get_db),
 ):
-    # 클라이언트가 보낸 user_id 대신, 토큰에서 직접 추출
-    result = await auth_service.get_user_id_from_refresh_token(redis_client, body.refresh_token)
+    try:
+        result = await auth_service.get_user_id_from_refresh_token(redis_client, body.refresh_token)
+    except auth_service.TokenReusedException as e:
+        # tombstone 감지 → 전체 세션 강제 종료
+        logger.warning(
+            "Refresh Token 재사용 감지 — 전체 세션 강제 종료",
+            user_id=e.user_id,
+        )
+        await auth_service.revoke_all_refresh_tokens(redis_client, e.user_id)
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="유효하지 않은 Refresh Token입니다.",
+        ) from e
 
     if result is None:
         # 존재하지 않는 토큰 = 이미 삭제됐거나 위조된 토큰

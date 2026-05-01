@@ -26,6 +26,16 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 # ════════════════════════════════════════
+# 예외 클래스
+# ════════════════════════════════════════
+class TokenReusedException(Exception):
+    """이미 사용된(회전된) Refresh Token으로 재시도 시 발생"""
+
+    def __init__(self, user_id: int):
+        self.user_id = user_id
+
+
+# ════════════════════════════════════════
 # 비밀번호 유틸리티
 # ════════════════════════════════════════
 
@@ -160,14 +170,29 @@ async def revoke_refresh_token(
     user_id: int,
     device: str = "web",
 ) -> None:
-    """로그아웃: 정방향 + 역방향 키 모두 삭제"""
+    """
+    Refresh Token Rotation 시 호출.
+    정방향 키는 삭제하되, 역방향 키는 tombstone으로 전환합니다.
+    tombstone: 토큰이 사용됐음을 기록 → 재사용 시도 시 user_id 식별 가능
+    """
     key = _refresh_token_key(user_id, device)
     stored_token = await redis.get(key)
 
+    if not stored_token:
+        return
+
+    tombstone_key = f"refresh:token:{stored_token}"
+    # 남은 TTL을 유지한 채 값을 tombstone으로 변경
+    # TTL이 지나면 자동 삭제되므로 Redis 메모리 누수 없음
+    remaining_ttl = await redis.ttl(key)
+
     async with redis.pipeline() as pipe:
-        pipe.delete(key)
-        if stored_token:
-            pipe.delete(f"refresh:token:{stored_token}")
+        pipe.delete(key)  # 정방향 키 삭제 (이 토큰으로 새 발급 불가)
+        if remaining_ttl > 0:
+            # tombstone 값: user_id와 device를 보존
+            pipe.setex(tombstone_key, remaining_ttl, f"REVOKED:{user_id}:{device}")
+        else:
+            pipe.delete(tombstone_key)
         await pipe.execute()
 
 
@@ -222,11 +247,24 @@ async def get_user_id_from_refresh_token(
     token: str,
 ) -> tuple[int, str] | None:
     """
-    토큰 값으로 (user_id, device) 역조회
-    존재하지 않으면 None 반환
+    반환값:  (user_id, device) - 유효한 토큰
+            None - 존재하지 않는 토큰
+
+    예외:
+      TokenReusedException — tombstone 감지 (재사용 공격)
+
+
     """
     value = await redis.get(f"refresh:token:{token}")
+
     if not value:
         return None
+
+    # tombstone 감지: "REVOKED:{user_id}:{device}" 형식
+    if value.startswith("REVOKED:"):
+        _, user_id_str, _ = value.split(":", 2)
+        raise TokenReusedException(user_id=int(user_id_str))
+
+    # 정상 토큰: "{user_id}:{device}" 형식
     user_id_str, device = value.split(":", 1)
     return int(user_id_str), device
