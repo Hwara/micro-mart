@@ -58,9 +58,7 @@ services:
   nats:
     image: nats:2-alpine
     container_name: micromart-nats
-    command: >
-      -js
-      -m 8222
+    command: ["-js", "-m", "8222"]
     # -js: JetStream 활성화 (메시지 영속성, 재전송 보장)
     # -m 8222: 모니터링 HTTP 포트 활성화
     ports:
