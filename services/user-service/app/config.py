@@ -25,7 +25,7 @@ class Settings(BaseSettings):
     debug: bool = False
 
     # 데이터베이스
-    database_url: str = "postgresql+asyncpg://user:password@localhost:5432/userdb"
+    database_url: str = "postgresql+asyncpg://micromart:micromart@localhost:5432/userdb"
     # SQLAlchemy 비동기 드라이버는 URL이 "postgresql+asyncpg://" 형식이어야 함
 
     # Redis
