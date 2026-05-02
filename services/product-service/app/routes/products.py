@@ -78,17 +78,26 @@ def require_admin(x_user_role: str = Header(default="")) -> None:
 @router.get("", response_model=ProductListResponse)
 async def list_products(
     db: DBSession,
+    x_user_role: str = Header(default="customer"),  # api-gateway에서 주입
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=settings.default_page_size, ge=1, le=settings.max_page_size),
-    active_only: bool = Query(default=True, description="활성 상품만 조회"),
+    active_only: bool = Query(default=True, description="활성 상품만 조회, 관리자만 False 가능"),
 ):
     """
     상품 목록 조회 (offset 페이지네이션).
 
     캐시 전략: 목록은 상세보다 짧은 TTL (60초).
-    active_only=False는 관리자 용도이므로 캐시 미적용 (캐시 키 복잡도 증가 방지).
+    - 일반 고객: active_only=True만 허용 (삭제된 상품 노출 방지)
+    - 관리자: active_only=False로 비활성 상품 조회 가능
     """
     offset = (page - 1) * page_size
+
+    # 관리자가 아닌데 active_only=False 요청 시 차단
+    if not active_only and x_user_role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="비활성 상품 조회는 관리자만 가능합니다."
+        )
+
     conditions = []
     if active_only:
         conditions.append(Product.is_active.is_(True))
