@@ -141,12 +141,12 @@ async def get_product(product_id: int, db: DBSession):
     # 1. 캐시 조회
     cached = await get_cached_product(redis_client, product_id)
     if cached:
-        cache_hit_counter.add(1, {"product_id": str(product_id)})
+        cache_hit_counter.add(1, {"result": "hit"})
         log.debug("상품 캐시 히트", product_id=product_id)
         return ProductResponse(**cached)
 
     # 2. DB 조회
-    cache_miss_counter.add(1, {"product_id": str(product_id)})
+    cache_miss_counter.add(1, {"result": "miss"})
     log.debug("상품 캐시 미스", product_id=product_id)
 
     result = await db.execute(
@@ -278,7 +278,7 @@ async def deduct_stock(
     - DB UPDATE에서 stock >= :qty 조건 포함 → 원자적 검사+차감
     - 앱 레벨 선검사(SELECT stock) → UPDATE 사이의 TOCTOU 경쟁 조건 방지
     """
-    stock_deduct_counter.add(1, {"product_id": str(product_id)})
+    stock_deduct_counter.add(1, {"result": "deduct"})
 
     # 낙관적 잠금 + 재고 부족 동시 처리: 단일 UPDATE 쿼리로 원자성 보장
     stmt = (
@@ -316,7 +316,7 @@ async def deduct_stock(
             )
 
         if product_state.version != payload.expected_version:
-            stock_conflict_counter.add(1, {"product_id": str(product_id)})
+            stock_conflict_counter.add(1, {"result": "conflict"})
             log.warning(
                 "상품 재고 감소 동시 요청으로 인한 충돌",
                 product_id=product_id,
@@ -333,7 +333,7 @@ async def deduct_stock(
             )
 
         # version은 맞는데 stock이 부족한 경우
-        stock_insufficient_counter.add(1, {"product_id": str(product_id)})
+        stock_insufficient_counter.add(1, {"result": "insufficient"})
         log.warning(
             "상품 재고 부족",
             product_id=product_id,
