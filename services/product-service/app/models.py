@@ -1,5 +1,4 @@
 from datetime import UTC, datetime
-from decimal import Decimal
 
 from sqlalchemy import BigInteger, Boolean, CheckConstraint, DateTime, Integer, String, Text, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
@@ -27,7 +26,7 @@ class Product(Base):
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
-    price: Mapped[Decimal] = mapped_column(Integer, nullable=False)
+    price: Mapped[Integer] = mapped_column(Integer, nullable=False)
     stock: Mapped[int] = mapped_column(
         Integer,
         nullable=False,
