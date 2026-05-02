@@ -1,9 +1,15 @@
+"""
+product-service 환경변수 설정
+
+pydantic-settings는 클래스 필드와 동일한 이름의 환경변수를 자동으로 읽음
+예) DATABASE_URL 환경변수 -> database_url 필드에 자동 매핑
+"""
 import os
 from functools import lru_cache
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# 현재 파일(settings.py)의 위치를 기준으로 절대 경로 계산
+# 현재 파일(config.py)의 위치를 기준으로 절대 경로 계산
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 env_path = os.path.join(BASE_DIR, ".env")
 
@@ -31,8 +37,9 @@ class Settings(BaseSettings):
     # 너무 길면 수정 후 반영이 늦고, 너무 짧으면 캐시 효과가 없음
     product_cache_ttl: int = 300  # seconds
 
-    # OTel
-    otlp_endpoint: str = "http://localhost:4317"
+    # OTel — 반드시 otel_exporter_otlp_endpoint 이름 사용 (축약형 금지)
+    otel_exporter_otlp_endpoint: str = "http://localhost:4317"
+    # log_format 기본값은 json (pretty는 로컬 개발 시 .env로 오버라이드)
     log_format: str = "json"
 
     # 페이지네이션 기본값
@@ -40,6 +47,8 @@ class Settings(BaseSettings):
     max_page_size: int = 100
 
 
+# lru_cache: Settings 객체를 한 번만 생성하고 재사용
+# 환경변수를 매번 읽지 않아도 되므로 성능상 이점이 있음
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
