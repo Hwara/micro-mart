@@ -15,11 +15,10 @@ from jose import JWTError
 from opentelemetry import metrics
 from pydantic import BaseModel, EmailStr
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from .. import auth as auth_service
 from ..config import get_settings
-from ..database import get_db, redis_client
+from ..database import DBSession, redis_client
 from ..models import User
 
 logger = structlog.get_logger(__name__)
@@ -88,7 +87,7 @@ class RefreshRequest(BaseModel):
 @router.post("/register", status_code=status.HTTP_201_CREATED)
 async def register(
     body: RegisterRequest,
-    db: AsyncSession = Depends(get_db),
+    db: DBSession,  # DBSession 타입 별칭 사용 (Depends(get_db) 직접 사용 금지)
 ):
     # 이메일 중복 선조회는 UX 목적 (빠른 피드백)으로 유지
     # 하지만 경쟁 조건 방어는 아래 IntegrityError 처리가 담당
@@ -107,6 +106,11 @@ async def register(
 
     try:
         await db.flush()
+        # flush: SQL INSERT를 DB에 전송하되 트랜잭션은 아직 열려 있음
+        # → user.id가 DB에서 채번되어 Python 객체에 반영됨
+        # commit: 트랜잭션을 확정하여 실제로 저장
+        # get_db()는 auto-commit을 하지 않으므로 반드시 여기서 명시적으로 호출
+        await db.commit()
     except IntegrityError as e:
         # 동시 요청으로 unique 제약 조건 위반 발생 시
         await db.rollback()
@@ -117,14 +121,14 @@ async def register(
 
     # 가입 완료 시점에 카운터 증가
     register_total.add(1)
-    logger.info("신규 회원가입", user_id=user.id)
+    logger.info("신규 회원가입", user_id=user.id, email=user.email)
     return {"user_id": user.id, "email": user.email}
 
 
 @router.post("/login", response_model=TokenResponse)
 async def login(
     body: LoginRequest,
-    db: AsyncSession = Depends(get_db),
+    db: DBSession,
 ):
     # 사용자 조회 + 비밀번호 검증
     user = await auth_service.get_user_by_email(db, body.email)
@@ -159,7 +163,7 @@ async def login(
 @router.post("/refresh", response_model=TokenResponse)
 async def refresh(
     body: RefreshRequest,
-    db: AsyncSession = Depends(get_db),
+    db: DBSession,
 ):
     try:
         result = await auth_service.get_user_id_from_refresh_token(redis_client, body.refresh_token)

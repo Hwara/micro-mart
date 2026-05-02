@@ -5,7 +5,7 @@ SQLAlchemy의 선언적(Declarative) 방식으로 테이블을 정의합니다.
 클래스 하나 = 테이블 하나입니다.
 """
 
-from datetime import UTC, datetime
+from datetime import datetime
 
 from sqlalchemy import BigInteger, Boolean, DateTime, Integer, String, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
@@ -36,9 +36,9 @@ class User(Base):
 
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
-    # created_at: DB 서버 시간 기준 (server_default=func.now())
-    # updated_at: onupdate는 lambda: datetime.now(UTC) 사용
-    #   → func.now()는 DDL용 DB 함수라 ORM UPDATE 시 자동 호출 보장 안됨
+    # created_at / updated_at 모두 func.now() (DB 서버 시간 기준) 사용
+    # 분산 환경에서 각 pod의 로컬 시계(NTP drift)에 의존하지 않도록
+    # DB 서버 시간을 단일 시간 기준으로 통일
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
@@ -46,5 +46,7 @@ class User(Base):
         DateTime(timezone=True),
         nullable=False,
         server_default=func.now(),
-        onupdate=lambda: datetime.now(UTC),
+        onupdate=func.now(),
+        # func.now()를 onupdate에 사용하면 SQLAlchemy가 UPDATE SET 절에
+        # updated_at = now() 를 직접 포함시켜 DB 서버 시간으로 갱신됨
     )
