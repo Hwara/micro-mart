@@ -10,8 +10,7 @@ from fastapi import FastAPI
 from shared.telemetry import RequestLoggingMiddleware, init_logging, init_telemetry
 
 from .config import get_settings
-from .database import engine, redis_client
-from .models import Base
+from .database import close_db, engine, init_db
 from .routes import auth as auth_router
 
 settings = get_settings()
@@ -32,16 +31,14 @@ async def lifespan(app: FastAPI):
 
     # DB 테이블 자동 생성 (개발용, 운영에서는 Alembic 마이그레이션 사용)
     if settings.debug:
-        async with engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
+        await init_db()
 
     logger.info("user-service 시작 완료", version=settings.service_version)
     yield
 
     # ── 종료 시 ──
     logger.info("user-service 종료 시작")
-    await engine.dispose()
-    await redis_client.aclose()
+    await close_db()
     logger.info("user-service 종료 완료")
 
 

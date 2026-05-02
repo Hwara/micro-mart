@@ -36,9 +36,17 @@ class User(Base):
 
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
-    # server_default: Python이 아닌 DB 서버에서 기본값 설정
-    # → 여러 서비스가 동시에 레코드를 삽입해도 시간이 정확함
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    # created_at / updated_at 모두 func.now() (DB 서버 시간 기준) 사용
+    # 분산 환경에서 각 pod의 로컬 시계(NTP drift)에 의존하지 않도록
+    # DB 서버 시간을 단일 시간 기준으로 통일
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+        # func.now()를 onupdate에 사용하면 SQLAlchemy가 UPDATE SET 절에
+        # updated_at = now() 를 직접 포함시켜 DB 서버 시간으로 갱신됨
     )

@@ -1,3 +1,10 @@
+"""
+데이터베이스 및 Redis 연결 설정
+
+SQLAlchemy 비동기 엔진과 세션 팩토리를 생성합니다.
+각 요청마다 독립적인 세션을 생성하고 요청이 끝나면 자동으로 닫습니다.
+"""
+
 from collections.abc import AsyncGenerator
 from typing import Annotated
 
@@ -10,19 +17,21 @@ from .models import Base
 
 settings = get_settings()
 
-# AsyncEngine: user-service와 동일한 패턴
-# pool_size/max_overflow는 운영에서 조정, 개발은 기본값 사용
+# ── SQLAlchemy 비동기 엔진 ──
+# pool_size: 동시에 유지할 DB 연결 수
+# max_overflow: pool_size 초과 시 추가로 허용할 연결 수
+# pool_pre_ping: 쿼리 전에 연결이 살아있는지 확인 (k8s 재배포 시 stale 커넥션 방지)
 engine = create_async_engine(
     settings.database_url,
-    # debug=True면 실행되는 SQL을 로그로 출력, 운영에서는 SQL 로그 비활성화 (성능 + 보안)
     echo=settings.debug,
-    pool_pre_ping=True,  # 연결 유효성 체크 (k8s 재배포 시 stale 커넥션 방지)
-    pool_size=10,
-    max_overflow=20,
+    pool_pre_ping=True,
+    pool_size=5,
+    max_overflow=10,
 )
 
 # 세션 팩토리: 매번 새로운 AsyncSession을 만들어주는 공장
 # expire_on_commit=False: 커밋 후에도 객체 속성에 접근 가능하게 설정
+# 변수명은 반드시 async_session_factory (AsyncSessionLocal 사용 금지)
 async_session_factory = async_sessionmaker(
     bind=engine,
     class_=AsyncSession,
@@ -52,7 +61,12 @@ async def close_db() -> None:
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
-    """FastAPI Depends용 DB 세션 제공자."""
+    """
+    FastAPI 의존성 주입(Dependency Injection)용 DB 세션 생성기
+
+    commit은 각 route 핸들러에서 명시적으로 호출한다.
+    예외 발생 시 자동으로 롤백되고 세션은 finally에서 항상 닫힌다.
+    """
     async with async_session_factory() as session:
         try:
             yield session
@@ -63,5 +77,5 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
             await session.close()
 
 
-# FastAPI Depends 타입 별칭 (코드 간결화)
+# FastAPI Depends 타입 별칭 — route에서 Depends(get_db) 직접 사용 금지
 DBSession = Annotated[AsyncSession, Depends(get_db)]
