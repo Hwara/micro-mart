@@ -316,7 +316,10 @@ async def deduct_stock(
             )
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail="동시 요청으로 인한 충돌입니다. 재시도해 주세요.",
+                detail=ErrorResponse(
+                    detail="동시 요청으로 인한 충돌입니다. 재시도해 주세요.",
+                    code="VERSION_CONFLICT",
+                ).model_dump(),
                 # order-service가 code로 충돌 vs 재고부족 구분 가능
             )
 
@@ -330,7 +333,10 @@ async def deduct_stock(
         )
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f"재고가 부족합니다. 현재 재고: {product_state.stock}",
+            detail=ErrorResponse(
+                detail=f"재고가 부족합니다. 현재 재고: {product_state.stock}",
+                code="INSUFFICIENT_STOCK",
+            ).model_dump(),
         )
 
     await db.commit()
