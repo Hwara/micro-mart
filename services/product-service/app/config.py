@@ -24,8 +24,8 @@ class Settings(BaseSettings):
 
     # Redis: user-service와 동일 인스턴스, 다른 키 네임스페이스로 격리
     redis_url: str = "redis://localhost:6379/0"
-    redis_socket_connect_timeout: int = 1000
-    redis_socket_timeout: int = 1000
+    redis_socket_connect_timeout: float = 1.0
+    redis_socket_timeout: float = 1.0
 
     # 캐시 TTL: 상품 데이터는 자주 변하지 않으므로 5분으로 설정
     # 너무 길면 수정 후 반영이 늦고, 너무 짧으면 캐시 효과가 없음
