@@ -121,7 +121,7 @@ async def register(
 
     # 가입 완료 시점에 카운터 증가
     register_total.add(1)
-    logger.info("신규 회원가입", user_id=user.id, email=user.email)
+    logger.info("신규 회원가입", user_id=user.id)
     return {"user_id": user.id, "email": user.email}
 
 
