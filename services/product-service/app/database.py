@@ -34,6 +34,8 @@ async_session_factory = async_sessionmaker(
 redis_client = aioredis.from_url(
     settings.redis_url,
     decode_responses=True,
+    socket_connect_timeout=settings.redis_socket_connect_timeout,
+    socket_timeout=settings.redis_socket_timeout,
 )
 
 
