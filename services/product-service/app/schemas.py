@@ -20,7 +20,7 @@ class ProductUpdate(BaseModel):
     """상품 수정 요청. 모든 필드 optional (PATCH 의미론)."""
 
     name: str | None = Field(None, min_length=1, max_length=200)
-    description: str | None = None
+    description: str | None = Field(None, max_length=2000)
     price: int | None = Field(None, gt=0)
     stock: int | None = Field(None, ge=0)
     is_active: bool | None = None
