@@ -84,6 +84,11 @@ def verify_internal_service(
     1단계 (현재): 공유 시크릿 헤더 검증
     2단계 (미래): mTLS + Service Mesh 정책으로 대체
     """
+    if not settings.internal_service_token:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="내부 서비스 토큰이 설정되지 않았습니다.",
+        )
     if not hmac.compare_digest(x_internal_token, settings.internal_service_token):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
