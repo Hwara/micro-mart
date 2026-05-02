@@ -1,3 +1,5 @@
+import hmac
+
 import structlog
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from opentelemetry import metrics
@@ -69,6 +71,23 @@ def require_admin(x_user_role: str = Header(default="")) -> None:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="관리자 권한이 필요합니다.",
+        )
+
+
+def verify_internal_service(
+    x_internal_token: str = Header(default=""),
+) -> None:
+    """
+    내부 서비스 전용 엔드포인트 보호 (order-service → product-service).
+
+    운영 보안 레벨:
+    1단계 (현재): 공유 시크릿 헤더 검증
+    2단계 (미래): mTLS + Service Mesh 정책으로 대체
+    """
+    if not hmac.compare_digest(x_internal_token, settings.internal_service_token):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="내부 서비스 인증에 실패했습니다.",
         )
 
 
@@ -265,6 +284,7 @@ async def deduct_stock(
     product_id: int,
     payload: StockDeductRequest,
     db: DBSession,
+    _: None = Depends(verify_internal_service),
 ):
     """
     재고 차감 (order-service 전용 내부 API).

@@ -16,6 +16,9 @@ class Settings(BaseSettings):
     service_version: str = "0.1.0"
     debug: bool = False
 
+    # 내부 서비스 토큰
+    internal_service_token: str = "change-me-in-production"
+
     # DB: infra.yaml의 productdb 연결
     database_url: str = "postgresql+asyncpg://micromart:micromart@localhost:5432/productdb"
 
