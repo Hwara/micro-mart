@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     debug: bool = False
 
     # 내부 서비스 토큰
-    internal_service_token: str = "change-me-in-production"
+    internal_service_token: str
 
     # DB: infra.yaml의 productdb 연결
     database_url: str = "postgresql+asyncpg://micromart:micromart@localhost:5432/productdb"
@@ -30,9 +30,6 @@ class Settings(BaseSettings):
     # 캐시 TTL: 상품 데이터는 자주 변하지 않으므로 5분으로 설정
     # 너무 길면 수정 후 반영이 늦고, 너무 짧으면 캐시 효과가 없음
     product_cache_ttl: int = 300  # seconds
-
-    # 목록 캐시는 상세보다 짧게: 상품 추가/삭제 시 즉시 반영이 더 중요
-    product_list_cache_ttl: int = 60  # seconds
 
     # OTel
     otlp_endpoint: str = "http://localhost:4317"
