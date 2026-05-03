@@ -90,7 +90,10 @@ NATS 소비 · 알림 발송"]
 
 - **역할**: 회원가입, 로그인, JWT 발급(RS256), Refresh Token Rotation, token_version 관리
 - **DB**: `user-db` (PostgreSQL)
-- **Redis**: `refresh:user:{id}:{device}` 키로 기기별 Refresh Token 저장, `user:{id}:token_version` 저장
+- **Redis**:
+  - `refresh:user:{id}:{device}` — 정방향 키 (user_id→token)
+  - `refresh:token:{token}` — 역방향 키 (token→user_id, 재사용 감지용 tombstone)
+  - `user:{id}:token_version` — 강제 로그아웃 버전 관리
 - **관찰성 포인트**: 로그인 성공/실패 카운터(`login_total`), 신규 가입 카운터(`register_total`), 토큰 재발급 카운터(`token_refresh_total`)
 - **엔드포인트**:
   - `POST /auth/register` — 회원가입
@@ -193,7 +196,8 @@ STARTED
 ### Redis 저장 구조
 
 ```text
-refresh:user:{id}:{device} → Refresh Token 값 (기기별 세션)
+refresh:user:{id}:{device} → 정방향 키 (user_id→token), Refresh Token 값 (기기별 세션)
+refresh:token:{token} → 역방향 키 (token→user_id, 재사용 감지용 tombstone)
 user:{id}:token_version → 버전 번호
 ```
 
