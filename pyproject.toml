@@ -9,6 +9,7 @@ select = [
     "B",   # flake8-bugbear (잠재적 버그 패턴)
     "UP",  # pyupgrade (Python 최신 문법 권장)
 ]
+ignore = ["E402"]
 
 [tool.ruff.lint.flake8-bugbear]
 # B008 예외: FastAPI Depends, Query, Body 등은 기본 인자로 사용하는 것이 공식 패턴
