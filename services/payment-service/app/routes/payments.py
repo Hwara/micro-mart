@@ -158,6 +158,7 @@ async def create_payment(
     )
 
     process_start = datetime.now(UTC)
+    processed_at = datetime.now(UTC)
 
     # ⑤ Chaos DB 슬로우쿼리 시뮬레이션
     if settings.chaos_db_slowquery:
@@ -168,7 +169,8 @@ async def create_payment(
     if is_chaos_failure:
         payment.status = PaymentStatus.REJECTED
         payment.failure_reason = "CHAOS_FAILURE"
-        payment.processed_at = datetime.now(UTC)
+        rejected_at = datetime.now(UTC)
+        payment.processed_at = rejected_at
         await db.commit()
 
         payment_rejected_counter.add(1, {"reason": "chaos"})
@@ -181,7 +183,7 @@ async def create_payment(
         )
 
         # 레이턴시 메트릭 기록
-        latency_ms = (datetime.now(UTC) - process_start).total_seconds() * 1000
+        latency_ms = (rejected_at - process_start).total_seconds() * 1000
         payment_latency_histogram.record(latency_ms)
 
         # 402 Payment Required: 결제 거절을 표현하는 가장 적합한 HTTP 상태 코드
@@ -196,13 +198,13 @@ async def create_payment(
     # 승인 처리: PG 트랜잭션 ID는 UUID로 시뮬레이션
     payment.status = PaymentStatus.APPROVED
     payment.pg_transaction_id = f"PG-{uuid.uuid4().hex[:16].upper()}"
-    payment.processed_at = datetime.now(UTC)
+    payment.processed_at = processed_at
     await db.commit()
     await db.refresh(payment)
 
     payment_approved_counter.add(1)
 
-    latency_ms = (payment.processed_at - process_start).total_seconds() * 1000
+    latency_ms = (processed_at - process_start).total_seconds() * 1000
     payment_latency_histogram.record(latency_ms)
 
     log.info(
