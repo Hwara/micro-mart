@@ -19,11 +19,12 @@ from app.models import Base
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
+from .conftest import INTERNAL_TOKEN
+
 # ─── 테스트 픽스처 ─────────────────────────────────────────────
 
 
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
-INTERNAL_TOKEN = "test-internal-token"
 
 
 @pytest_asyncio.fixture(scope="function")
@@ -47,7 +48,7 @@ async def db_session(test_engine):
 
 
 @pytest_asyncio.fixture(scope="function")
-async def client(db_session, monkeypatch):
+async def client(db_session):
     """
     FastAPI 테스트 클라이언트.
 
@@ -81,8 +82,11 @@ class TestCreatePayment:
     """POST /payments 테스트."""
 
     @pytest.mark.asyncio
-    async def test_결제_승인_정상흐름(self, client):
+    async def test_결제_승인_정상흐름(self, client, monkeypatch):
         """Chaos Mode 비활성화 시 결제는 항상 APPROVED."""
+        settings = get_settings()
+        monkeypatch.setattr(settings, "chaos_failure_rate", 0.0)
+
         response = await client.post(
             "/payments",
             json={"order_id": 1, "user_id": 10, "amount": 29900},
@@ -99,8 +103,11 @@ class TestCreatePayment:
         assert data["processed_at"] is not None
 
     @pytest.mark.asyncio
-    async def test_내부토큰_누락시_401(self, client):
+    async def test_내부토큰_누락시_401(self, client, monkeypatch):
         """X-Internal-Token 없이 요청하면 401."""
+        settings = get_settings()
+        monkeypatch.setattr(settings, "chaos_failure_rate", 0.0)
+
         response = await client.post(
             "/payments",
             json={"order_id": 1, "user_id": 10, "amount": 29900},
@@ -109,8 +116,11 @@ class TestCreatePayment:
         assert response.status_code == 401
 
     @pytest.mark.asyncio
-    async def test_내부토큰_잘못된값_401(self, client):
+    async def test_내부토큰_잘못된값_401(self, client, monkeypatch):
         """잘못된 X-Internal-Token은 401."""
+        settings = get_settings()
+        monkeypatch.setattr(settings, "chaos_failure_rate", 0.0)
+
         response = await client.post(
             "/payments",
             json={"order_id": 1, "user_id": 10, "amount": 29900},
@@ -119,8 +129,11 @@ class TestCreatePayment:
         assert response.status_code == 401
 
     @pytest.mark.asyncio
-    async def test_중복결제_409(self, client):
+    async def test_중복결제_409(self, client, monkeypatch):
         """같은 order_id로 두 번 요청하면 409 DUPLICATE_PAYMENT."""
+        settings = get_settings()
+        monkeypatch.setattr(settings, "chaos_failure_rate", 0.0)
+
         payload = {"order_id": 99, "user_id": 10, "amount": 5000}
 
         # 첫 번째 요청: 성공
@@ -133,8 +146,11 @@ class TestCreatePayment:
         assert second.json()["detail"]["code"] == "DUPLICATE_PAYMENT"
 
     @pytest.mark.asyncio
-    async def test_금액_0이하_422(self, client):
+    async def test_금액_0이하_422(self, client, monkeypatch):
         """amount가 0 이하면 422 Validation Error."""
+        settings = get_settings()
+        monkeypatch.setattr(settings, "chaos_failure_rate", 0.0)
+
         response = await client.post(
             "/payments",
             json={"order_id": 1, "user_id": 10, "amount": 0},
@@ -157,20 +173,6 @@ class TestCreatePayment:
         assert response.status_code == 402
         assert response.json()["detail"]["code"] == "PAYMENT_REJECTED"
 
-    @pytest.mark.asyncio
-    async def test_chaos_실패율_0퍼센트(self, client, monkeypatch):
-        """CHAOS_FAILURE_RATE=0.0 → 항상 APPROVED."""
-        settings = get_settings()
-        monkeypatch.setattr(settings, "chaos_failure_rate", 0.0)
-
-        response = await client.post(
-            "/payments",
-            json={"order_id": 300, "user_id": 10, "amount": 10000},
-            headers=internal_headers(),
-        )
-        assert response.status_code == 201
-        assert response.json()["status"] == "APPROVED"
-
 
 # ─── 결제 조회 테스트 ──────────────────────────────────────────
 
@@ -179,8 +181,11 @@ class TestGetPayment:
     """GET /payments/{payment_id} 테스트."""
 
     @pytest.mark.asyncio
-    async def test_결제_조회_정상(self, client):
+    async def test_결제_조회_정상(self, client, monkeypatch):
         """생성된 결제를 ID로 조회."""
+        settings = get_settings()
+        monkeypatch.setattr(settings, "chaos_failure_rate", 0.0)
+
         # 결제 생성
         create_res = await client.post(
             "/payments",
@@ -209,8 +214,11 @@ class TestCreateRefund:
     """POST /payments/{payment_id}/refunds 테스트."""
 
     @pytest_asyncio.fixture
-    async def approved_payment_id(self, client) -> int:
+    async def approved_payment_id(self, client, monkeypatch) -> int:
         """APPROVED 상태 결제를 미리 생성하는 픽스처."""
+        settings = get_settings()
+        monkeypatch.setattr(settings, "chaos_failure_rate", 0.0)
+
         res = await client.post(
             "/payments",
             json={"order_id": 50, "user_id": 7, "amount": 50000},
