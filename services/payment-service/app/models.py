@@ -8,8 +8,29 @@ refunds는 별도 테이블로 분리 → 부분 환불 확장 가능.
 import enum
 from datetime import datetime
 
+# app/models.py
 from sqlalchemy import BigInteger, DateTime, ForeignKey, Integer, String, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+from sqlalchemy.types import TypeDecorator
+
+
+class BigIntegerType(TypeDecorator):
+    """
+    PostgreSQL: BIGINT, SQLite: INTEGER로 렌더링하는 커스텀 타입.
+
+    SQLite는 BigInteger autoincrement를 지원하지 않아
+    테스트 환경(SQLite)에서 id 자동 채번이 실패하는 문제를 해결.
+    운영(PostgreSQL)에서는 BigInteger 그대로 유지.
+    """
+
+    impl = BigInteger
+    cache_ok = True
+
+    def load_dialect_impl(self, dialect):
+        if dialect.name == "sqlite":
+            # SQLite는 INTEGER PRIMARY KEY만 autoincrement 지원
+            return dialect.type_descriptor(Integer())
+        return dialect.type_descriptor(BigInteger())
 
 
 class Base(DeclarativeBase):
@@ -55,11 +76,11 @@ class Payment(Base):
 
     __tablename__ = "payments"
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(BigIntegerType, primary_key=True, autoincrement=True)
     # order-service orders.id 논리적 참조. UNIQUE → 중복 결제 DB 레벨 차단
-    order_id: Mapped[int] = mapped_column(BigInteger, nullable=False, unique=True, index=True)
+    order_id: Mapped[int] = mapped_column(BigIntegerType, nullable=False, unique=True, index=True)
     # user-service users.id 논리적 참조
-    user_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
+    user_id: Mapped[int] = mapped_column(BigIntegerType, nullable=False, index=True)
     amount: Mapped[int] = mapped_column(Integer, nullable=False)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default=PaymentStatus.PENDING)
     pg_transaction_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
@@ -93,10 +114,10 @@ class Refund(Base):
 
     __tablename__ = "refunds"
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(BigIntegerType, primary_key=True, autoincrement=True)
     # 동일 DB 내 물리적 FK
     payment_id: Mapped[int] = mapped_column(
-        BigInteger, ForeignKey("payments.id"), nullable=False, index=True
+        BigIntegerType, ForeignKey("payments.id"), nullable=False, index=True
     )
     amount: Mapped[int] = mapped_column(Integer, nullable=False)
     reason: Mapped[str | None] = mapped_column(String(500), nullable=True)

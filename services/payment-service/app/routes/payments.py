@@ -30,7 +30,6 @@ from ..schemas import (
 
 router = APIRouter(prefix="/payments", tags=["payments"])
 log = structlog.get_logger(__name__)
-settings = get_settings()
 
 # ─── 관찰성 메트릭 ────────────────────────────────────────────────
 # 설계 문서 관찰성 포인트: 결제 실패율, P95/P99 레이턴시, 결제 금액 히스토그램
@@ -101,6 +100,8 @@ async def create_payment(
     - order_id UNIQUE 제약으로 DB 레벨 중복 방지
     - 앱 레벨 선검사로 409 응답 코드 명확화
     """
+    settings = get_settings()
+
     payment_counter.add(1)
     payment_amount_histogram.record(payload.amount)
 
