@@ -35,20 +35,14 @@ LGTM(Loki, Grafana, Tempo, Prometheus) 관찰성 스택을 깊이 학습하기 �
 ```mermaid
 flowchart LR
     K6["🖥 Client / k6"]
-    GW["api-gateway :8000
-JWT 검증 · 라우팅"]
+    GW["api-gateway :8000\nJWT 검증 · 라우팅"]
 
     subgraph SERVICES["Application Services"]
-        US["user-service :8001
-회원가입 · JWT · Refresh Token"]
-        PS["product-service :8002
-상품 CRUD · Redis Cache · 재고 차감"]
-        OS["order-service :8003 ★
-주문 · 오케스트레이션"]
-        PAY["payment-service :8004
-PG 시뮬 · Chaos Mode"]
-        NS["notification-service
-NATS 소비 · 알림 발송"]
+        US["user-service :8001\n회원가입 · JWT · Refresh Token"]
+        PS["product-service :8002\n상품 CRUD · Redis Cache · 재고 차감"]
+        OS["order-service :8003 ★\n주문 · 오케스트레이션"]
+        PAY["payment-service :8004\nPG 시뮬 · Chaos Mode"]
+        NS["notification-service\nNATS 소비 · 알림 발송"]
     end
 
     subgraph MQ["Message Queue"]
@@ -129,13 +123,25 @@ NATS 소비 · 알림 발송"]
 - **역할**: 결제 승인/거절 처리 (외부 PG 시뮬레이션), Chaos Mode 내장, 환불 처리
 - **DB**: `payment-db` (PostgreSQL)
 - **ERD**: `payments`, `refunds` 테이블 사용. `payments.order_id`는 UNIQUE로 중복 결제 방지
-- **관찰성 포인트**: 결제 실패율, P95/P99 레이턴시, 결제 금액 히스토그램
+- **인증**: 모든 엔드포인트가 `X-Internal-Token` 인증 필수 (order-service 전용 내부 API)
+- **관찰성 포인트**:
+  - `payment_total` — 결제 요청 총 횟수
+  - `payment_approved_total` — 결제 승인 횟수
+  - `payment_rejected_total` — 결제 거절 횟수 (Chaos Mode 포함, `reason` 레이블)
+  - `payment_amount_krw` — 결제 금액 분포 히스토그램 (원단위)
+  - `payment_processing_latency_ms` — 결제 처리 레이턴시 히스토그램 (ms)
+  - `refund_total` — 환불 요청 총 횟수
+- **엔드포인트**:
+  - `POST /payments` — 결제 요청 (내부 전용, 중복 결제 앱+DB 이중 차단)
+  - `GET  /payments/{id}` — 결제 상태 조회 (내부 전용)
+  - `POST /payments/{id}/refunds` — 환불 요청 (부분 환불 지원, 내부 전용)
+- **헬스체크**: `GET /health` — Chaos Mode 설정 상태 포함 응답
 
 **Chaos Mode 환경변수:**
 
 ```text
-CHAOS_FAILURE_RATE=0.3 # 30% 확률로 결제 실패
-CHAOS_LATENCY_MS=2000 # 결제 응답 2초 지연
+CHAOS_FAILURE_RATE=0.3  # 30% 확률로 결제 실패
+CHAOS_LATENCY_MS=2000   # 결제 응답 2초 지연
 CHAOS_DB_SLOWQUERY=true # DB 슬로우쿼리 시뮬레이션
 ```
 
@@ -318,8 +324,24 @@ micro-mart/
 │   │   ├── Dockerfile
 │   │   ├── .env.example
 │   │   └── requirements.txt
-│   ├── order-service/
 │   ├── payment-service/
+│   │   ├── app/
+│   │   │   ├── __init__.py
+│   │   │   ├── main.py
+│   │   │   ├── config.py
+│   │   │   ├── database.py
+│   │   │   ├── models.py
+│   │   │   ├── schemas.py
+│   │   │   ├── dependencies.py
+│   │   │   └── routes/
+│   │   │       └── payments.py
+│   │   ├── tests/
+│   │   │   ├── conftest.py
+│   │   │   └── test_payments.py
+│   │   ├── .env.example
+│   │   ├── pytest.ini
+│   │   └── requirements.txt
+│   ├── order-service/
 │   └── notification-service/
 ├── shared/
 │   ├── __init__.py
@@ -354,7 +376,7 @@ micro-mart/
 1. ✅ **공통 기반** — `shared/telemetry/`, structlog JSON 설정
 2. ✅ **user-service** — JWT 발급, Refresh Token Rotation, token_version 관리
 3. ✅ **product-service** — 상품 CRUD, Redis 캐싱, 낙관적 잠금 재고 차감
-4. ⏳ **payment-service** — 결제 시뮬레이션, Chaos Mode 구현
+4. ✅ **payment-service** — 결제 시뮬레이션, Chaos Mode, 부분 환불 구현
 5. ⏳ **order-service** — 오케스트레이터, 서비스 간 호출, NATS 발행
 6. ⏳ **api-gateway** — JWT 검증 미들웨어, 리버스 프록시
 7. ⏳ **notification-service** — NATS 소비, 비동기 처리

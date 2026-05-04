@@ -1,6 +1,6 @@
 # MicroMart — 서비스 기능 정의 문서
 
-> 최종 갱신일: 2026-05-03
+> 최종 갱신일: 2026-05-04
 > 목적: 서비스별 책임, 엔드포인트, 내부 동작, 서비스 간 호출 계약을 구현 전에 명확히 고정하기 위한 기능 정의 문서
 
 ---
@@ -167,6 +167,91 @@
 
 ---
 
+### 3.3 payment-service
+
+#### 역할
+
+`payment-service`는 외부 PG를 흉내 내는 결제 시뮬레이터다. 결제 승인/거절, 지연, 장애 주입, 환불을 담당한다. 모든 엔드포인트는 `X-Internal-Token` 인증이 필수인 내부 전용 API다.
+
+#### 저장소
+
+- PostgreSQL: `payments`, `refunds`
+
+#### 주요 데이터
+
+- `payments.order_id`는 UNIQUE여야 한다 — DB 레벨 중복 결제 멱등성 보장.
+- `processed_at`은 실제 처리 완료 시점을 기록한다 (`created_at`과 차이 = 결제 레이턴시).
+- `refunds`는 부분 환불 확장을 고려해 별도 테이블로 분리한다.
+
+#### 엔드포인트
+
+- `POST /payments`
+  - 기능: 주문 결제 요청
+  - 인증: `X-Internal-Token` 필수
+  - 입력: `order_id`, `user_id`, `amount`
+  - 처리:
+    1. 중복 결제 앱 레벨 선검사 (`order_id` 조회 → `409 DUPLICATE_PAYMENT`)
+    2. Chaos Mode 지연 적용 (`CHAOS_LATENCY_MS`)
+    3. `PENDING` 상태로 Payment 레코드 생성 및 `flush` (DB UNIQUE 제약 이중 차단)
+    4. Chaos Mode 실패율 평가 (`CHAOS_FAILURE_RATE`)
+    5. Chaos DB 슬로우쿼리 시뮬레이션 (`CHAOS_DB_SLOWQUERY`)
+    6. 승인: `APPROVED` + `pg_transaction_id` 생성, `processed_at` 기록
+    7. 거절: `REJECTED` + `failure_reason=CHAOS_FAILURE`, `402` 반환
+  - 실패 응답:
+    - `409 DUPLICATE_PAYMENT` — 중복 결제
+    - `402 PAYMENT_REJECTED` — Chaos Mode 거절
+
+- `GET /payments/{payment_id}`
+  - 기능: 결제 상태 조회
+  - 인증: `X-Internal-Token` 필수
+  - 실패: `404` — 결제 내역 없음
+
+- `POST /payments/{payment_id}/refunds`
+  - 기능: 환불 요청 (부분 환불 지원)
+  - 인증: `X-Internal-Token` 필수
+  - 입력: `amount`, `reason`
+  - 처리:
+    1. 결제 내역 조회
+    2. `APPROVED` 상태인지 확인 (`PENDING`/`REJECTED`/`REFUNDED`는 환불 불가)
+    3. 기존 `COMPLETED` 환불 합산 후 잔여 환불 가능 금액 계산
+    4. 환불 금액 초과 검증
+    5. `Refund` 레코드 생성 (`status=COMPLETED`, `processed_at` 즉시 기록)
+    6. 전액 환불 시 `payments.status`를 `REFUNDED`로 변경
+  - 실패 응답:
+    - `400 REFUND_NOT_ALLOWED` — 환불 불가 상태
+    - `422 REFUND_AMOUNT_EXCEEDED` — 환불 금액 초과
+
+- `GET /health`
+  - 기능: 헬스체크 (k8s liveness probe용)
+  - 응답: 서비스 상태 + 현재 Chaos Mode 설정값 포함
+
+#### 관찰성 메트릭
+
+| 메트릭 이름 | 타입 | 설명 |
+| ----------- | ---- | ---- |
+| `payment_total` | Counter | 결제 요청 총 횟수 |
+| `payment_approved_total` | Counter | 결제 승인 횟수 |
+| `payment_rejected_total` | Counter | 결제 거절 횟수 (`reason` 레이블) |
+| `payment_amount_krw` | Histogram | 결제 금액 분포 (원단위) |
+| `payment_processing_latency_ms` | Histogram | 결제 처리 레이턴시 (ms) |
+| `refund_total` | Counter | 환불 요청 총 횟수 |
+
+#### Chaos Mode
+
+- `CHAOS_FAILURE_RATE` — 0.0~1.0 (0.3 = 30% 확률 거절)
+- `CHAOS_LATENCY_MS` — 결제 처리 전 강제 지연 (밀리초), `asyncio.sleep`으로 비동기 처리
+- `CHAOS_DB_SLOWQUERY` — DB 슬로우쿼리 시뮬레이션 (`random.uniform(1.0, 3.0)` 지연)
+
+#### 설계 의도
+
+- 실제 PG 연동 전 단계에서 결제 실패율, 레이턴시, 장애 상황을 관찰성 실습에 활용한다.
+- `order_id UNIQUE`로 중복 결제를 DB 레벨에서 차단하고, 앱 레벨 선검사로 에러 응답 코드를 명확히 한다.
+- `processed_at`을 `created_at`과 분리해 결제 레이턴시를 메트릭으로 관찰 가능하게 한다.
+- `PENDING` 상태로 레코드를 선생성해, 서버 크래시 시에도 요청 접수 기록이 남도록 한다.
+- Redis를 사용하지 않아 `database.py`에 Redis 설정이 없다 (dev_convention.md 준수).
+
+---
+
 ## 4. 예정 서비스 기능 정의
 
 ### 4.1 api-gateway
@@ -252,54 +337,7 @@
 
 ---
 
-### 4.3 payment-service
-
-#### 역할
-
-`payment-service`는 외부 PG를 흉내 내는 결제 시뮬레이터다. 결제 승인/거절, 지연, 장애 주입, 환불을 담당한다.
-
-#### 저장소
-
-- PostgreSQL: `payments`, `refunds`
-
-#### 핵심 데이터
-
-- `payments.order_id`는 UNIQUE여야 한다.
-- `processed_at`은 실제 처리 완료 시점을 기록한다.
-- `refunds`는 부분 환불 확장을 고려해 별도 테이블로 분리한다.
-
-#### 예상 엔드포인트
-
-- `POST /payments`
-  - 기능: 주문 결제 요청
-  - 입력: `order_id`, `user_id`, `amount`
-  - 처리:
-    1. 중복 결제 검사 (`order_id UNIQUE`)
-    2. Chaos Mode 지연/실패 반영
-    3. 승인 또는 거절 저장
-    4. 결과 응답 반환
-
-- `GET /payments/{id}`
-  - 기능: 결제 상태 조회
-
-- `POST /payments/{id}/refunds`
-  - 기능: 환불 요청
-  - 처리: 부분 환불 또는 전체 환불 저장
-
-#### Chaos Mode
-
-- `CHAOS_FAILURE_RATE`
-- `CHAOS_LATENCY_MS`
-- `CHAOS_DB_SLOWQUERY`
-
-#### 설계 의도
-
-- 실제 PG 연동 전 단계에서 결제 실패율, 레이턴시, 장애 상황을 관찰성 실습에 활용한다.
-- `order_id UNIQUE`로 중복 결제를 DB 레벨에서 차단한다.
-
----
-
-### 4.4 notification-service
+### 4.3 notification-service
 
 #### 역할
 
@@ -320,8 +358,8 @@
 
 1. Client → `api-gateway`
 2. `api-gateway` → `order-service`
-3. `order-service` → `product-service` 재고 차감
-4. `order-service` → `payment-service` 결제 요청
+3. `order-service` → `product-service` 재고 차감 (`X-Internal-Token`)
+4. `order-service` → `payment-service` 결제 요청 (`X-Internal-Token`)
 5. `order-service` → `order-db` 저장
 6. `order-service` → NATS `order.completed`
 7. `notification-service` 소비
@@ -329,19 +367,33 @@
 ### 주문 생성 실패 경로
 
 - 재고 부족: 주문 즉시 실패
-- 결제 실패: 재고 롤백 후 실패
+- 결제 실패 (`402 PAYMENT_REJECTED`): 재고 롤백 후 실패
 - 롤백 미완료: Saga 상태로 남기고 후속 복구 대상 처리
+
+### payment-service 호출 규격
+
+```python
+# order-service → payment-service
+POST /payments
+Headers:
+  X-Internal-Token: {INTERNAL_SERVICE_TOKEN}
+Body:
+  { "order_id": int, "user_id": int, "amount": int }
+
+# 성공 응답 (201)
+{ "id": int, "status": "APPROVED", "pg_transaction_id": "PG-...", ... }
+
+# 실패 응답 (402)
+{ "detail": { "detail": "결제가 거절되었습니다.", "code": "PAYMENT_REJECTED" } }
+```
 
 ---
 
 ## 6. 구현 우선순위
 
-1. `payment-service`
-   - 이유: `order-service`가 호출할 외부 계약을 먼저 고정해야 함
-2. `order-service`
-   - 이유: payment/product 호출 계약이 확정된 뒤 Saga 구현
-3. `api-gateway`
-4. `notification-service`
+1. ⏳ `order-service` — payment/product 호출 계약 확정 후 Saga 구현
+2. ⏳ `api-gateway`
+3. ⏳ `notification-service`
 
 ---
 

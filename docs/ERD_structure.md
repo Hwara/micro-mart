@@ -1,6 +1,6 @@
 # MicroMart — ERD 설계 문서
 
-> 최종 확정일: 2026-05-03
+> 최종 확정일: 2026-05-04
 > 설계 기준: MSA Database per Service 원칙
 > 서비스 간 물리적 FK 없음 — 논리적 ID 참조만 사용
 
@@ -56,6 +56,10 @@ class RefundStatus(str, enum.Enum):
     COMPLETED = "COMPLETED"   # 환불 완료
     FAILED = "FAILED"         # 환불 실패
 ```
+
+> ⚠️ payment-service에서는 SQLite 테스트 환경의 BigInteger autoincrement 미지원 문제를 해결하기 위해
+> `BigIntegerType` 커스텀 TypeDecorator를 사용한다.
+> PostgreSQL에서는 `BigInteger`로, SQLite(테스트)에서는 `Integer`로 자동 분기된다.
 
 ---
 
@@ -154,12 +158,12 @@ class RefundStatus(str, enum.Enum):
 | 컬럼 | 타입 | 제약 | 설명 |
 | ------ | ------ | ------ | ------ |
 | `id` | BigInteger | PK, AI | |
-| `order_id` | BigInteger | NOT NULL, **UNIQUE** | order-service `orders.id` 논리적 참조. UNIQUE로 중복 결제 DB 레벨 방지 |
+| `order_id` | BigInteger | NOT NULL, **UNIQUE**, INDEX | order-service `orders.id` 논리적 참조. UNIQUE로 중복 결제 DB 레벨 방지 |
 | `user_id` | BigInteger | NOT NULL, INDEX | user-service `users.id` 논리적 참조 |
 | `amount` | Integer | NOT NULL | 결제 금액 (원단위) |
-| `status` | String(PaymentStatus) | NOT NULL | 결제 상태 |
-| `pg_transaction_id` | String | NULLABLE | 가상 PG 트랜잭션 ID. 실 PG 연동 시 외부 트랜잭션 추적용 |
-| `failure_reason` | String | NULLABLE | Chaos Mode 포함 실패 원인 |
+| `status` | String(PaymentStatus) | NOT NULL, DEFAULT `'PENDING'` | 결제 상태 |
+| `pg_transaction_id` | String(100) | NULLABLE | 가상 PG 트랜잭션 ID. 실 PG 연동 시 외부 트랜잭션 추적용 |
+| `failure_reason` | String(200) | NULLABLE | Chaos Mode 포함 실패 원인 |
 | `processed_at` | DateTime(tz) | NULLABLE | 실제 결제 승인/거절 처리 시각. `created_at`과 구분하여 결제 레이턴시 측정 |
 | `created_at` | DateTime(tz) | NOT NULL, server_default | |
 | `updated_at` | DateTime(tz) | NOT NULL, onupdate | |
@@ -168,6 +172,7 @@ class RefundStatus(str, enum.Enum):
 
 - `order_id UNIQUE` 이유: 네트워크 재시도로 인한 중복 결제 요청이 들어와도 DB 레벨에서 멱등성을 강제. PG 시뮬레이션이지만 실 PG 연동 시나리오와 동일한 방어 구조 적용.
 - `processed_at` 분리 이유: `created_at`은 결제 레코드 생성 시각, `processed_at`은 실제 PG 응답 수신 시각. 두 값의 차이가 **결제 레이턴시** 관찰성 지표가 됨.
+- `PENDING` 선생성 이유: 처리 전 레코드를 먼저 생성해 서버 크래시 시에도 요청 접수 기록이 남도록 함.
 
 ### `refunds` 테이블
 
@@ -176,10 +181,12 @@ class RefundStatus(str, enum.Enum):
 | `id` | BigInteger | PK, AI | |
 | `payment_id` | BigInteger | NOT NULL, INDEX, **FK → payments.id** | 동일 DB 내 물리적 FK 허용 |
 | `amount` | Integer | NOT NULL | 환불 금액. 부분 환불 지원 (`amount ≤ payments.amount`) |
-| `reason` | String | NULLABLE | 환불 사유 |
-| `status` | String(RefundStatus) | NOT NULL | 환불 처리 상태 |
+| `reason` | String(500) | NULLABLE | 환불 사유 |
+| `status` | String(RefundStatus) | NOT NULL, DEFAULT `'PENDING'` | 환불 처리 상태 |
 | `processed_at` | DateTime(tz) | NULLABLE | 실제 환불 처리 시각 |
 | `created_at` | DateTime(tz) | NOT NULL, server_default | |
+
+> ⚠️ `refunds`에는 `updated_at`이 없다. 환불 처리는 `processed_at`으로 완료 시각을 기록하며, 생성 후 수정되지 않는 이력 데이터다.
 
 ---
 
@@ -226,3 +233,4 @@ STARTED
 | 날짜 | 변경 내용 |
 | ------ | ----------- |
 | 2026-05-03 | 최초 ERD 확정 (user, product, order, payment, refunds) |
+| 2026-05-04 | payment-service 구현 완료 반영: `BigIntegerType` 커스텀 타입 추가 주석, `payments.status` DEFAULT `'PENDING'` 명시, `refunds.updated_at` 부재 설계 의도 추가, `PENDING` 선생성 설계 의도 추가 |
