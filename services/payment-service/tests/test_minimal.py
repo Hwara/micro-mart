@@ -75,7 +75,7 @@ async def test_레이어3_DB_INSERT():
         session.add(dup)
         try:
             await session.commit()
-            print("\n❌ 중복 INSERT가 통과됨 — UNIQUE 제약이 없음!")
+            pytest.fail("중복 INSERT가 통과됨 — payments.order_id UNIQUE 제약이 작동하지 않음")
         except IntegrityError:
             print("\n✅ 중복 INSERT 차단 확인 (UNIQUE 정상 작동)")
 

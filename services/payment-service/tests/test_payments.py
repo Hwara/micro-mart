@@ -15,8 +15,9 @@ import pytest_asyncio
 from app.config import get_settings
 from app.database import get_db
 from app.main import app
-from app.models import Base
+from app.models import Base, Payment
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from .conftest import INTERNAL_TOKEN
@@ -281,7 +282,7 @@ class TestCreateRefund:
         assert response.status_code == 422
 
     @pytest.mark.asyncio
-    async def test_미승인결제_환불불가_400(self, client, monkeypatch):
+    async def test_미승인결제_환불불가_400(self, client, db_session, monkeypatch):
         """REJECTED 결제는 환불 불가 → 400."""
         settings = get_settings()
         # Chaos 100%로 REJECTED 결제 생성
@@ -295,6 +296,22 @@ class TestCreateRefund:
         # 402 응답이지만 DB에는 REJECTED 레코드가 남음
         # payment_id는 DB에서 직접 조회 필요 (아래는 db_session 픽스처 활용)
         assert create_res.status_code == 402
+
+        monkeypatch.setattr(settings, "chaos_failure_rate", 0.0)
+
+        result = await db_session.execute(select(Payment).where(Payment.order_id == 77))
+        payment = result.scalar_one_or_none()
+        assert payment is not None, "REJECTED 결제 레코드가 DB에 없음"
+        assert payment.status == "REJECTED"
+
+        # 실제 환불 시도 → 400 검증
+        refund_res = await client.post(
+            f"/payments/{payment.id}/refunds",
+            json={"amount": 5000},
+            headers=internal_headers(),
+        )
+        assert refund_res.status_code == 400
+        assert refund_res.json()["detail"]["code"] == "REFUND_NOT_ALLOWED"
 
     @pytest.mark.asyncio
     async def test_없는결제_환불_404(self, client):

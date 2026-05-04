@@ -19,8 +19,17 @@ def setup_env():
     1. cache_clear() → 기존 캐시 제거
     2. setenv() → 새 환경변수 설정
     3. get_settings() → 새 환경변수로 인스턴스 생성 + 캐시
+
+    원래 값을 보관했다가 테스트 종료 후 정확히 복원.
+    원래 값이 없었다면 키 자체를 삭제 (설정 안 된 상태로 복원).
     """
+    original = os.environ.get("INTERNAL_SERVICE_TOKEN")  # 원래 값 보관
+
     get_settings.cache_clear()
     os.environ["INTERNAL_SERVICE_TOKEN"] = INTERNAL_TOKEN
     yield
     get_settings.cache_clear()
+    if original is None:
+        os.environ.pop("INTERNAL_SERVICE_TOKEN", None)  # 원래 없었으면 삭제
+    else:
+        os.environ["INTERNAL_SERVICE_TOKEN"] = original  # 원래 값으로 복원
