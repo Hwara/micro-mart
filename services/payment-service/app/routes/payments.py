@@ -159,7 +159,6 @@ async def create_payment(
     )
 
     process_start = datetime.now(UTC)
-    processed_at = datetime.now(UTC)
 
     # ⑤ Chaos DB 슬로우쿼리 시뮬레이션
     if settings.chaos_db_slowquery:
@@ -199,6 +198,8 @@ async def create_payment(
     # 승인 처리: PG 트랜잭션 ID는 UUID로 시뮬레이션
     payment.status = PaymentStatus.APPROVED
     payment.pg_transaction_id = f"PG-{uuid.uuid4().hex[:16].upper()}"
+
+    processed_at = datetime.now(UTC)
     payment.processed_at = processed_at
     await db.commit()
     await db.refresh(payment)
