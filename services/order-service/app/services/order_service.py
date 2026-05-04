@@ -154,8 +154,8 @@ async def create_order(
         current_version = products[item_req.product_id]["version"]
         try:
             await http_clients.deduct_stock(
-                item_req.product_id,
-                item_req.quantity,
+                product_id=item_req.product_id,
+                quantity=item_req.quantity,
                 expected_version=current_version,
             )
             deducted_items.append((item_req.product_id, item_req.quantity))
