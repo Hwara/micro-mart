@@ -18,6 +18,7 @@ import structlog
 from opentelemetry import metrics
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from ..models import Order, OrderItem, OrderStatus, SagaStatus
 from ..schemas import OrderCreateRequest, OrderResponse
@@ -250,11 +251,18 @@ async def create_order(
         total_amount=total_amount,
     )
 
-    # items lazy-load 방지: 명시적 조회
-    await db.refresh(order)
-    result = await db.execute(select(Order).where(Order.id == order.id))
+    # ── 최종 응답 — items eager load ─────────────────────────────────
+    # db.refresh(order)는 order 스칼라 컬럼만 갱신, relationship(items)은 로드하지 않음.
+    # model_validate() 내부에서 order.items에 접근하면 lazy load가 트리거되는데,
+    # 동기 컨텍스트에서는 await이 불가 → MissingGreenlet 에러 발생.
+    # selectinload로 items를 await 가능한 컨텍스트에서 미리 로드해 해결.
+
+    result = await db.execute(
+        select(Order)
+        .options(selectinload(Order.items))  # ← items를 지금 여기서 로드
+        .where(Order.id == order.id)
+    )
     order = result.scalar_one()
-    # items는 라우터에서 eager load로 처리
 
     return OrderResponse.model_validate(order)
 
