@@ -1,12 +1,8 @@
 # tests/test_minimal.py
 """
 진단용 최소 테스트 — 레이어별로 무엇이 실패하는지 확인
+주의: 다른 테스트에 환경변수 등 설정이 오염되지 않도록 단일 실행 필요
 """
-
-import os
-import sys
-
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -147,6 +143,7 @@ async def test_레이어5_의존성_오버라이드():
             print(f"\n응답 코드: {response.status_code}")
             print(f"override_called: {override_called}")
             # 401이어도 괜찮음 — 우리가 확인하려는 건 오버라이드 호출 여부
+            assert override_called is True
             assert response.status_code in (401, 201)
     finally:
         app.dependency_overrides.clear()
