@@ -10,6 +10,13 @@ select = [
     "UP",  # pyupgrade (Python 최신 문법 권장)
 ]
 
+[tool.ruff.lint.per-file-ignores]
+# sys.path 조작 후 지연 임포트가 필요한 파일들 (E402)
+"**/main.py" = ["E402"]           # 각 서비스 main.py (sys.path 조작)
+"**/tests/**/*.py" = ["E402"]     # 모든 서비스의 tests 디렉터리
+"shared/**/*.py" = ["E402"]       # shared/telemetry 포함 shared 전체
+
+
 [tool.ruff.lint.flake8-bugbear]
 # B008 예외: FastAPI Depends, Query, Body 등은 기본 인자로 사용하는 것이 공식 패턴
 extend-immutable-calls = [
