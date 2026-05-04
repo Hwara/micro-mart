@@ -7,6 +7,7 @@ payment-service 공통 의존성
 import hmac
 
 from fastapi import Header, HTTPException, status
+from pydantic import ValidationError
 
 from .config import get_settings
 
@@ -20,7 +21,13 @@ def verify_internal_service(
     product-service와 동일한 패턴 사용.
     hmac.compare_digest: 타이밍 공격(timing attack) 방지를 위한 상수 시간 비교.
     """
-    settings = get_settings()  # ← 함수 내부에서 호출 (lru_cache라 비용 없음)
+    try:
+        settings = get_settings()  # ← 함수 내부에서 호출 (lru_cache라 비용 없음)
+    except ValidationError as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="내부 서비스 토큰이 설정되지 않았습니다.",
+        ) from e
 
     if not settings.internal_service_token:
         raise HTTPException(
