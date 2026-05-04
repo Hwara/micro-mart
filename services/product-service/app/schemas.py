@@ -70,6 +70,26 @@ class StockDeductResponse(BaseModel):
     new_version: int
 
 
+class StockRestoreRequest(BaseModel):
+    """
+    재고 복구 요청 (order-service 보상 트랜잭션 전용).
+
+    낙관적 잠금 미적용 이유:
+    - 복구는 이미 차감된 수량을 되돌리는 것 → 다른 요청과 경합 없음
+    - version 충돌로 복구가 실패하면 보상 트랜잭션 자체가 무효화되는 더 큰 문제 발생
+    """
+
+    quantity: int = Field(..., gt=0, description="복구할 수량 (1 이상)")
+
+
+class StockRestoreResponse(BaseModel):
+    """재고 복구 성공 응답."""
+
+    product_id: int
+    remaining_stock: int
+    new_version: int
+
+
 class ErrorResponse(BaseModel):
     """에러 응답 표준 형식."""
 

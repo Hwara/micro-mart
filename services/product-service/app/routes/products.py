@@ -21,6 +21,8 @@ from ..schemas import (
     ProductUpdate,
     StockDeductRequest,
     StockDeductResponse,
+    StockRestoreRequest,
+    StockRestoreResponse,
 )
 
 router = APIRouter(prefix="/products", tags=["products"])
@@ -387,6 +389,70 @@ async def deduct_stock(
     )
 
     return StockDeductResponse(
+        product_id=product_id,
+        remaining_stock=row.stock,
+        new_version=row.version,
+    )
+
+
+@router.post(
+    "/{product_id}/restore-stock",
+    response_model=StockRestoreResponse,
+    responses={
+        404: {"model": ErrorResponse},
+    },
+)
+async def restore_stock(
+    product_id: int,
+    payload: StockRestoreRequest,
+    db: DBSession,
+    _: None = Depends(verify_internal_service),
+):
+    """
+    재고 복구 (order-service 보상 트랜잭션 전용 내부 API).
+
+    낙관적 잠금 미적용:
+    - 보상 트랜잭션은 "이미 차감된 수량을 되돌리는" 단방향 연산
+    - 경합이 발생할 수 없으므로 version 체크 불필요
+    - version 충돌로 복구가 막히면 재고가 영구 소실되는 더 큰 장애 발생
+
+    stock += quantity 원자적 증가.
+    """
+    stmt = (
+        update(Product)
+        .where(
+            Product.id == product_id,
+            Product.is_active.is_(True),
+        )
+        .values(
+            stock=Product.stock + payload.quantity,
+            version=Product.version + 1,  # version은 증가 (변경 이력 추적용)
+        )
+        .returning(Product.stock, Product.version)
+    )
+
+    result = await db.execute(stmt)
+    row = result.fetchone()
+    await db.commit()
+
+    if row is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="상품을 찾을 수 없습니다.",
+        )
+
+    # 재고 복구 후 캐시 무효화
+    await invalidate_product_cache(redis_client, product_id)
+
+    log.info(
+        "재고 복구 완료 (보상 트랜잭션)",
+        product_id=product_id,
+        quantity=payload.quantity,
+        remaining_stock=row.stock,
+        new_version=row.version,
+    )
+
+    return StockRestoreResponse(
         product_id=product_id,
         remaining_stock=row.stock,
         new_version=row.version,
