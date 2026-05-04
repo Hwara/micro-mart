@@ -97,10 +97,15 @@ services/<service-name>/
 - `.env.example`에는 실제 필요한 값만 명시한다.
 - 운영/개발 환경에서 바뀔 수 있는 값은 하드코딩하지 않는다.
 - 보안 민감값(`JWT_PRIVATE_KEY`, `INTERNAL_SERVICE_TOKEN`, DB 비밀번호)은 코드에 직접 넣지 않는다.
+- `Settings()` 인스턴스는 모듈 레벨에서 생성하지 않는다.
+  `get_settings()`를 `@lru_cache`로 감싸고, 필요한 시점(함수/메서드 내부)에서 호출한다.
+  `lru_cache` 덕분에 반복 호출 비용이 없으며, 테스트 시 `get_settings.cache_clear()`로
+  환경변수 변경을 즉시 반영할 수 있다. FastAPI 공식 문서도 이 패턴을 권장한다.
 
 예시:
 
 ```python
+from functools import lru_cache
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -117,8 +122,13 @@ class Settings(BaseSettings):
     )
 
 
-settings = Settings()
+@lru_cache
+def get_settings() -> Settings:
+    return Settings()
 ```
+
+> ⚠️ `settings = Settings()` 처럼 모듈 임포트 시점에 인스턴스를 생성하지 않는다.
+> 테스트 환경에서 환경변수가 설정되기 전에 모듈이 임포트되면 잘못된 값이 캐싱될 수 있다.
 
 ---
 
@@ -128,29 +138,62 @@ settings = Settings()
 - 세션 의존성은 `AsyncSession` 기반 generator로 제공한다.
 - `expire_on_commit=False`를 기본값으로 사용한다.
 - 공통 타입 별칭 `DBSession`을 사용해 라우터 시그니처를 단순화한다.
-- Redis는 **사용하는 서비스만** 정의한다. Redis가 필요 없는 서비스는 `config.py`와 `database.py`에 Redis 설정을 추가하지 않는다.
+- `engine`과 `async_session_factory`는 `get_settings()`를 함수 내부에서 호출해 생성한다.
+  모듈 레벨에서 `settings = get_settings()`를 호출하면 테스트 환경에서
+  잘못된 DB URL로 엔진이 생성될 수 있다.
+- Redis는 **사용하는 서비스만** 정의한다. Redis가 필요 없는 서비스는 `config.py`와
+  `database.py`에 Redis 설정을 추가하지 않는다.
 
 예시:
 
 ```python
-from typing import Annotated, AsyncGenerator
+from collections.abc import AsyncGenerator
+from typing import Annotated
 
 from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from app.config import settings
+from .config import get_settings
 
-engine = create_async_engine(settings.database_url, future=True)
-async_session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+settings = get_settings()  # lru_cache로 감싸져 있어 반복 호출 비용 없음
+
+engine = create_async_engine(
+    settings.database_url,
+    echo=settings.debug,
+    pool_pre_ping=True,
+    pool_size=5,
+    max_overflow=10,
+)
+
+async_session_factory = async_sessionmaker(
+    bind=engine,
+    class_=AsyncSession,
+    expire_on_commit=False,
+)
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
+    """
+    FastAPI 의존성 주입용 DB 세션 생성기.
+
+    테스트 시 app.dependency_overrides[get_db]로 교체해 사용한다.
+    """
     async with async_session_factory() as session:
-        yield session
+        try:
+            yield session
+        except Exception:
+            await session.rollback()
+            raise
+        finally:
+            await session.close()
 
 
 DBSession = Annotated[AsyncSession, Depends(get_db)]
 ```
+
+> ⚠️ `engine`은 모듈 임포트 시 생성되므로, 테스트에서 DB URL을 바꾸려면
+> `get_db`를 통째로 `dependency_overrides`로 교체하는 방식을 사용한다.
+> DB URL 자체를 바꿔야 하는 테스트는 별도 엔진을 생성해 오버라이드한다.
 
 ---
 
