@@ -98,7 +98,7 @@ flowchart LR
 
 #### product-service (포트 8002)
 
-- **역할**: 상품 목록/상세 조회, 상품 등록·수정·삭제(admin), 재고 차감(order-service 전용 내부 API)
+- **역할**: 상품 목록/상세 조회, 상품 등록·수정·삭제(admin), 재고 차감·복구(order-service 전용 내부 API)
 - **DB**: `product-db` (PostgreSQL) + `product-cache` (Redis, Cache-Aside 패턴)
 - **낙관적 잠금**: 재고 차감 시 `version` 필드로 동시 요청 충돌 감지, `409 VERSION_CONFLICT` 반환
 - **관찰성 포인트**: 캐시 히트율(`product_cache_hits_total` / `misses_total`), 재고 부족 이벤트(`product_stock_insufficient_total`), 낙관적 잠금 충돌(`product_stock_conflict_total`)
@@ -109,14 +109,28 @@ flowchart LR
   - `PUT  /products/{id}` — 상품 수정 (admin 전용, 캐시 무효화)
   - `DELETE /products/{id}` — 소프트 삭제 (admin 전용)
   - `POST /products/{id}/deduct-stock` — 재고 차감 (내부 서비스 전용, `X-Internal-Token` 인증)
+  - `POST /products/{id}/restore-stock` — 재고 복구 보상 트랜잭션 (내부 서비스 전용, `X-Internal-Token` 인증)
 
 #### order-service (포트 8003) ⭐ 핵심 서비스
 
 - **역할**: 주문 생성·조회, product-service 재고 차감 호출, payment-service 결제 호출, NATS 이벤트 발행
 - **DB**: `order-db` (PostgreSQL)
+- **Redis**: 사용하지 않음 (Redis 설정 없음)
+- **NATS**: `order.completed` 이벤트 발행 — best-effort (발행 실패 시 주문은 `COMPLETED` 유지, 로그 기록)
 - **핵심 설계**: Orchestration Saga 패턴으로 단계별 상태(`saga_status`)와 보상 트랜잭션을 관리
 - **ERD**: `orders`, `order_items` 테이블 사용. 상품명·단가를 주문 시점 스냅샷으로 저장
-- **관찰성 포인트**: 주문 완료율, 주문 실패 원인 분류, 서비스 간 호출 레이턴시, 분산 트레이스 루트 스팬
+- **관찰성 포인트**:
+  - `order_created_total` — 주문 생성 요청 총 횟수
+  - `order_completed_total` — 주문 완료 횟수
+  - `order_failed_total` — 주문 실패 횟수 (`reason` 레이블)
+  - `order_amount_krw` — 주문 금액 분포 히스토그램 (원단위)
+  - `saga_stock_rollback_total` — 재고 롤백 보상 트랜잭션 횟수
+- **엔드포인트**:
+  - `POST /orders` — 주문 생성 (Saga 오케스트레이션, `X-User-ID` 헤더)
+  - `GET  /orders` — 내 주문 목록 (페이지네이션, 최신순)
+  - `GET  /orders/{id}` — 주문 상세 (items 포함, IDOR 방어)
+  - `GET  /health` — 헬스체크 (NATS 연결 상태 포함)
+- **낙관적 잠금 재시도**: `VERSION_CONFLICT` 시 상품 재조회 후 최대 `max_optimistic_retry`(기본 3)회 재시도
 
 #### payment-service (포트 8004)
 
@@ -158,11 +172,12 @@ CHAOS_DB_SLOWQUERY=true # DB 슬로우쿼리 시뮬레이션
 ```text
 Client → api-gateway POST /api/orders (JWT 포함)
 api-gateway → order-service X-User-ID 헤더 + traceId 전파
-order-service → product-service 재고 확인 + 차감 (낙관적 잠금)
-order-service → payment-service 결제 요청
+order-service → product-service 상품 정보 조회 (GET /products/{id})
+order-service → product-service 재고 차감 (POST /products/{id}/deduct-stock, X-Internal-Token)
+order-service → payment-service 결제 요청 (POST /payments, X-Internal-Token)
 payment-service → order-service 결제 승인/거절 응답
-order-service → 실패 시 재고 롤백, 성공 시 order-db 주문 저장
-order-service → NATS order.completed 이벤트 발행
+order-service → 실패 시 재고 롤백 (POST /products/{id}/restore-stock), 성공 시 order-db 주문 저장
+order-service → NATS order.completed 이벤트 발행 (best-effort)
 NATS → notification-service 이벤트 소비, 알림 발송 시뮬레이션
 ```
 
@@ -172,7 +187,7 @@ Tempo는 전체 구간을 단일 트레이스로 표현하고, 각 서비스는 
 
 ```text
 STARTED
-  → STOCK_DEDUCTED
+  → STOCK_DEDUCTED    (stock_deducted = True 커밋)
   → PAYMENT_REQUESTED
   → COMPLETED
 
@@ -180,8 +195,9 @@ STARTED
 STARTED
   → STOCK_DEDUCTED
   → PAYMENT_REQUESTED
-  → STOCK_ROLLBACK_NEEDED
-  → STOCK_ROLLED_BACK
+  → STOCK_ROLLBACK_NEEDED   (즉시 커밋 — 배치 복구 대상 스캔 근거)
+  → STOCK_ROLLED_BACK       (롤백 성공)
+     OR STOCK_ROLLBACK_NEEDED (롤백 실패, best-effort 유지)
   → FAILED
 ```
 
@@ -280,6 +296,7 @@ user:{id}:token_version → 버전 번호
 | 낙관적 잠금 충돌 | 동시 주문 요청 | `product_stock_conflict_total` 메트릭 급등 |
 | DB 커넥션 풀 고갈 | product-service 부하 증가 | DB pool 메트릭 + 연쇄 에러 트레이스 |
 | 알림 큐 적체 | notification-service 중단 후 재기동 | NATS 메시지 백로그 메트릭 |
+| Saga 보상 트랜잭션 | 결제 거절 발생 | `saga_stock_rollback_total` 증가 + Tempo 롤백 스팬 |
 
 ---
 
@@ -321,6 +338,7 @@ micro-mart/
 │   │   │   ├── schemas.py
 │   │   │   ├── cache.py
 │   │   │   └── routes/
+│   │   │       └── products.py
 │   │   ├── Dockerfile
 │   │   ├── .env.example
 │   │   └── requirements.txt
@@ -342,6 +360,24 @@ micro-mart/
 │   │   ├── pytest.ini
 │   │   └── requirements.txt
 │   ├── order-service/
+│   │   ├── app/
+│   │   │   ├── __init__.py
+│   │   │   ├── main.py
+│   │   │   ├── config.py
+│   │   │   ├── database.py
+│   │   │   ├── models.py
+│   │   │   ├── schemas.py
+│   │   │   ├── dependencies.py
+│   │   │   ├── nats_client.py
+│   │   │   ├── routes/
+│   │   │   │   └── orders.py
+│   │   │   └── services/
+│   │   │       ├── http_clients.py
+│   │   │       └── order_service.py
+│   │   ├── test/
+│   │   ├── .env.example
+│   │   ├── pytest.ini
+│   │   └── requirements.txt
 │   └── notification-service/
 ├── shared/
 │   ├── __init__.py
@@ -363,7 +399,10 @@ micro-mart/
 │   ├── dev_convention.md
 │   ├── service_function_definition.md
 │   ├── micromart_design.md
-│   └── ERD_structure.md
+│   ├── ERD_structure.md
+│   └── references/
+│       ├── init-develop-environment.md
+│       └── shared-telemetry-reference.md
 ├── pyproject.toml
 ├── .pre-commit-config.yaml
 └── README.md
@@ -375,9 +414,9 @@ micro-mart/
 
 1. ✅ **공통 기반** — `shared/telemetry/`, structlog JSON 설정
 2. ✅ **user-service** — JWT 발급, Refresh Token Rotation, token_version 관리
-3. ✅ **product-service** — 상품 CRUD, Redis 캐싱, 낙관적 잠금 재고 차감
+3. ✅ **product-service** — 상품 CRUD, Redis 캐싱, 낙관적 잠금 재고 차감·복구
 4. ✅ **payment-service** — 결제 시뮬레이션, Chaos Mode, 부분 환불 구현
-5. ⏳ **order-service** — 오케스트레이터, 서비스 간 호출, NATS 발행
+5. ✅ **order-service** — 오케스트레이터, Saga 패턴, 서비스 간 호출, NATS 이벤트 발행
 6. ⏳ **api-gateway** — JWT 검증 미들웨어, 리버스 프록시
 7. ⏳ **notification-service** — NATS 소비, 비동기 처리
 8. ⏳ **Kubernetes 매니페스트** — Deployment, Service, ConfigMap, Secret

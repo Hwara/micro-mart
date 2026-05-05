@@ -1,6 +1,6 @@
 # MicroMart — AI 개발 컨벤션 가이드
 
-> 최종 갱신일: 2026-05-03
+> 최종 갱신일: 2026-05-05
 > 목적: MicroMart 프로젝트에서 AI/개발자가 일관된 구조와 규칙으로 코드를 작성하도록 하는 기준 문서
 
 ---
@@ -20,7 +20,7 @@
 1. `ERD_structure.md` — 모델, 컬럼, 제약 조건, 상태값 기준
 2. `service_function_definition.md` — 서비스별 책임, 엔드포인트 계약, 서비스 간 호출 흐름
 3. `micromart_design.md` — 전체 아키텍처와 설계 의도
-4. `aidev.md` — 코드 작성 컨벤션, 파일 구조, 공통 구현 규칙
+4. `dev_convention.md` — 코드 작성 컨벤션, 파일 구조, 공통 구현 규칙
 
 > ⚠️ 문서 간 충돌 시, 도메인 규칙은 `ERD_structure.md`와 `service_function_definition.md`를 우선한다.
 
@@ -32,7 +32,7 @@
 - 서비스별 독립 배포를 전제로 하며, 서비스 간 DB 공유를 금지한다.
 - 서비스 간 참조는 DB FK가 아니라 HTTP/NATS와 논리적 ID 참조로 처리한다.
 - 구현은 Phase 단위로 진행한다.
-- 새 기능을 작성할 때는 기존 구현 패턴(user-service, product-service)을 우선 참고한다.
+- 새 기능을 작성할 때는 기존 구현 패턴(user-service, product-service, payment-service, order-service)을 우선 참고한다.
 - 코드는 학습용 프로젝트이지만, 현업 수준의 명시성과 유지보수성을 기준으로 작성한다.
 
 ---
@@ -71,6 +71,17 @@ services/<service-name>/
 ├── .env.example
 └── requirements.txt
 ```
+
+### 서비스별 추가 모듈 예시
+
+비즈니스 로직이 복잡하거나 외부 서비스 호출이 많은 서비스는 아래와 같이 모듈을 분리한다.
+
+| 서비스 | 추가 파일 | 역할 |
+|--------|-----------|------|
+| `order-service` | `nats_client.py` | NATS 싱글턴 커넥션 관리 (`main.py` 순환 import 방지) |
+| `order-service` | `services/http_clients.py` | product/payment 서비스 HTTP 클라이언트 (timeout, 에러 래핑) |
+| `order-service` | `services/order_service.py` | Saga 오케스트레이션 비즈니스 로직 |
+| `product-service` | `cache.py` | Redis Cache-Aside 헬퍼 |
 
 ### 파일 역할
 
@@ -144,6 +155,9 @@ def get_settings() -> Settings:
 - Redis는 **사용하는 서비스만** 정의한다. Redis가 필요 없는 서비스는 `config.py`와
   `database.py`에 Redis 설정을 추가하지 않는다.
 
+  > 현재 Redis 사용 서비스: `user-service`, `product-service`
+  > Redis 미사용 서비스: `order-service`, `payment-service`, `notification-service`
+
 예시:
 
 ```python
@@ -201,9 +215,13 @@ DBSession = Annotated[AsyncSession, Depends(get_db)]
 
 - SQLAlchemy 2.0의 `Mapped[...]` + `mapped_column()` 스타일을 사용한다.
 - PK는 특별한 사유가 없으면 `BigInteger` + `autoincrement=True`를 사용한다.
+- SQLite 테스트 환경 호환이 필요한 서비스는 `BigIntegerType` 커스텀 TypeDecorator를 사용한다.
+  PostgreSQL에서는 `BigInteger`, SQLite(테스트)에서는 `Integer`로 자동 분기된다.
+  현재 적용 서비스: `payment-service`, `order-service`
 - 모든 테이블은 `created_at`, `updated_at` 정책을 명확히 가져간다.
 - `created_at`은 `server_default=func.now()`를 사용한다.
 - `updated_at`은 `onupdate=func.now()`를 사용한다.
+- 불변 데이터 테이블(`order_items`, `refunds`)은 `updated_at`을 두지 않는다. 의도적 제외임을 주석 또는 docstring에 명시한다.
 - 동일 서비스 DB 내 관계만 물리적 FK를 허용한다.
 - 서비스 간 참조(`user_id`, `product_id`, `payment_id`)는 물리적 FK를 두지 않는다.
 - 서비스 간 데이터 정합성은 HTTP 호출과 도메인 로직으로 관리한다.
@@ -266,6 +284,7 @@ class PaymentStatus(str, enum.Enum):
 - ORM 모델을 그대로 응답으로 노출하지 않는다.
 - 금액, 수량, 상태값 등 비즈니스 의미가 있는 필드는 타입과 제약을 명확히 둔다.
 - 외부 API 응답과 내부 서비스 응답은 필요 시 별도 스키마로 구분한다.
+- 입력 유효성 검사가 복잡한 경우 `@model_validator`를 사용한다. (예: 중복 product_id 차단)
 
 예시:
 
@@ -319,7 +338,11 @@ async def create_payment(payload: PaymentCreateRequest, db: DBSession):
 - 하위 서비스는 외부 JWT를 직접 검증하지 않는다.
 - 서비스 간 호출 실패 시 실패 원인을 로그와 메트릭에 남긴다.
 - 재시도 가능한 오류와 비재시도 오류를 구분한다.
+  - 재시도 가능: `VERSION_CONFLICT(409)` → 상품 재조회 후 최대 `max_optimistic_retry`회 재시도
+  - 재시도 불가: `INSUFFICIENT_STOCK(409)`, `PAYMENT_REJECTED(402)` → 즉시 실패
+  - 네트워크 오류(`TimeoutException`): Saga 복잡도를 낮추기 위해 비재시도로 처리
 - 내부 API는 외부 클라이언트에 직접 노출하지 않는다.
+- HTTP 클라이언트는 서비스별로 `services/http_clients.py`에 분리하고, 커스텀 예외로 래핑한다.
 
 예시:
 
@@ -339,6 +362,7 @@ headers = {
 - 관리자 전용 기능은 역할 기반 권한 검사를 거친다.
 - 외부 공개 API는 입력 검증과 권한 검사를 우선한다.
 - 내부 API는 명세 문서에 요청/응답 형태를 먼저 정의한 뒤 구현한다.
+- `user_id`는 바디가 아닌 `X-User-ID` 헤더에서만 추출한다. gateway를 우회한 직접 호출로 user_id를 위조하는 공격을 방어한다.
 
 ---
 
@@ -348,6 +372,7 @@ headers = {
 - 보상 트랜잭션이 필요한 로직은 중간 상태를 DB에 저장해 복구 가능하게 만든다.
 - 중복 처리 방지가 필요한 기능은 애플리케이션 레벨 검사와 DB 제약을 함께 사용한다.
 - "성공 경로"뿐 아니라 "실패 경로"와 "부분 실패"를 먼저 설계하고 구현한다.
+- 보상 트랜잭션은 best-effort로 처리하되, 미완료 상태(`STOCK_ROLLBACK_NEEDED`)를 DB에 커밋해 배치 복구 잡이 스캔할 수 있도록 한다.
 
 ---
 
@@ -358,6 +383,7 @@ headers = {
 - trace_id, span_id, service name을 로그에 포함한다.
 - 비즈니스 이벤트는 의미 있는 event명을 사용한다. 예: `payment_approved`, `payment_rejected`, `stock_conflict`
 - 에러 로그에는 가능한 범위에서 원인 분류값(`failure_reason`)을 남긴다.
+- 각 서비스의 핵심 비즈니스 이벤트는 OpenTelemetry Counter/Histogram 메트릭으로 계측한다.
 
 ---
 
@@ -366,6 +392,7 @@ headers = {
 - `INTERNAL_SERVICE_TOKEN` 기본값은 개발용으로만 사용하고 운영에서는 반드시 변경한다.
 - private key, DB password, secret token은 절대 코드에 하드코딩하지 않는다.
 - 민감 정보(비밀번호, Refresh Token 원문)는 로그에 남기지 않는다.
+- 내부 서비스 토큰 비교는 `hmac.compare_digest`를 사용하여 타이밍 공격을 방지한다.
 - 외부 노출이 필요 없는 서비스(`payment-service`, `notification-service`)는 gateway 뒤 또는 내부 네트워크에만 두는 것을 전제로 설계한다.
 
 ---
@@ -386,7 +413,7 @@ headers = {
 - 모델 변경 → `ERD_structure.md`
 - 엔드포인트/호출 흐름 변경 → `service_function_definition.md`
 - 아키텍처/구현 현황 변경 → `README.md`, `micromart_design.md`
-- 공통 코드 작성 방식 변경 → `aidev.md`
+- 공통 코드 작성 방식 변경 → `dev_convention.md`
 
 > ⚠️ 새 서비스의 `routes`, `schemas`, 내부/외부 호출 로직을 작성하기 전에 반드시 `service_function_definition.md`를 먼저 확인한다.
 
@@ -414,3 +441,5 @@ headers = {
 - [ ] 실패 경로와 보상 로직을 먼저 고려했는가?
 - [ ] 로그/메트릭 포인트를 정했는가?
 - [ ] 관련 문서 업데이트가 필요한가?
+- [ ] Redis 미사용 서비스에 Redis 설정이 포함되어 있지 않은가?
+- [ ] 불변 데이터 테이블에 `updated_at`이 없고 그 이유가 명시되어 있는가?

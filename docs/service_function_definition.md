@@ -1,6 +1,6 @@
 # MicroMart — 서비스 기능 정의 문서
 
-> 최종 갱신일: 2026-05-04
+> 최종 갱신일: 2026-05-05
 > 목적: 서비스별 책임, 엔드포인트, 내부 동작, 서비스 간 호출 계약을 구현 전에 명확히 고정하기 위한 기능 정의 문서
 
 ---
@@ -26,7 +26,7 @@
 | -------- | ----------- | -------- |
 | `api-gateway` | JWT 검증, 라우팅, Rate Limiting, 요청 진입 제어 | 없음 |
 | `user-service` | 회원가입, 로그인, JWT 발급, Refresh Token Rotation, 로그아웃 | PostgreSQL, Redis |
-| `product-service` | 상품 조회/등록/수정/삭제, 캐시 관리, 재고 차감 | PostgreSQL, Redis |
+| `product-service` | 상품 조회/등록/수정/삭제, 캐시 관리, 재고 차감, 재고 복구 | PostgreSQL, Redis |
 | `order-service` | 주문 생성/조회, Saga 오케스트레이션, 재고 차감 및 결제 흐름 조정 | PostgreSQL |
 | `payment-service` | 결제 승인/거절 시뮬레이션, Chaos Mode, 환불 처리 | PostgreSQL |
 | `notification-service` | 주문 완료 이벤트 소비, 알림 발송 시뮬레이션 | 없음 |
@@ -106,7 +106,7 @@
 
 #### 역할
 
-`product-service`는 상품 카탈로그와 재고를 담당한다. 공개 조회 API와 관리자용 CRUD, 그리고 `order-service`가 호출하는 내부 재고 차감 API를 제공한다.
+`product-service`는 상품 카탈로그와 재고를 담당한다. 공개 조회 API와 관리자용 CRUD, 그리고 `order-service`가 호출하는 내부 재고 차감/복구 API를 제공한다.
 
 #### 저장소
 
@@ -124,6 +124,7 @@
 - `GET /products`
   - 기능: 상품 목록 조회
   - 지원: 페이지네이션, `active_only` 필터
+  - 권한: 비활성 상품 조회(`active_only=False`)는 admin 전용
 
 - `GET /products/{id}`
   - 기능: 상품 상세 조회
@@ -151,13 +152,22 @@
   - 기능: 주문용 내부 재고 차감
   - 인증: `X-Internal-Token`
   - 처리:
-    1. 현재 상품 조회
-    2. 재고 수량 확인
-    3. `version` 기반 낙관적 잠금 업데이트
-    4. 성공 시 `version` 증가
+    1. 단일 UPDATE 쿼리로 낙관적 잠금 + 재고 검사 원자적 처리
+    2. `version == expected_version` AND `stock >= quantity` 조건 만족 시 차감
+    3. 성공 시 `version` 증가, 캐시 무효화
   - 실패:
-    - 재고 부족
-    - 버전 충돌 시 `409 VERSION_CONFLICT`
+    - 재고 부족: `409 INSUFFICIENT_STOCK`
+    - 버전 충돌: `409 VERSION_CONFLICT`
+
+- `POST /products/{id}/restore-stock`
+  - 기능: 보상 트랜잭션용 내부 재고 복구
+  - 인증: `X-Internal-Token`
+  - 처리:
+    1. `stock += quantity` 원자적 증가 (낙관적 잠금 미적용)
+    2. `version` 증가 (변경 이력 추적용)
+    3. 성공 시 캐시 무효화
+  - 설계 의도: 복구는 단방향 증가 연산으로 경합이 없음. version 충돌로 복구가 막히면 재고 영구 소실 위험이 있으므로 잠금 미적용.
+  - 실패: `404` — 상품 없음 또는 비활성
 
 #### 설계 의도
 
@@ -252,6 +262,135 @@
 
 ---
 
+### 3.4 order-service
+
+#### 역할
+
+`order-service`는 시스템의 오케스트레이터다. 주문 생성, 주문 조회, 재고 차감 요청, 결제 요청, 주문 저장, 이벤트 발행을 한 흐름으로 조율한다.
+
+#### 저장소
+
+- PostgreSQL: `orders`, `order_items`
+- NATS: `order.completed` 이벤트 발행 (notification-service 소비)
+- Redis: 사용하지 않음 (`database.py`에 Redis 설정 없음)
+
+#### 핵심 데이터
+
+- `orders`: 사용자 ID, 총액, 주문 상태, Saga 상태, 실패 원인, 결제 ID
+- `order_items`: 상품 ID, 상품명 스냅샷, 단가 스냅샷, 수량, 할인액, 소계
+
+#### 파일 구성
+
+```text
+services/order-service/
+├── app/
+│   ├── __init__.py
+│   ├── main.py           # FastAPI 앱, lifespan (NATS 초기화/종료), 헬스체크
+│   ├── config.py         # Settings (product/payment URL, NATS URL, HTTP timeout 등)
+│   ├── database.py       # SQLAlchemy async engine, DBSession
+│   ├── dependencies.py   # get_current_user_id, verify_internal_service
+│   ├── models.py         # Order, OrderItem, OrderStatus, SagaStatus, BigIntegerType
+│   ├── schemas.py        # OrderCreateRequest, OrderResponse, OrderListResponse
+│   ├── nats_client.py    # NATS 싱글턴 (set/get/clear)
+│   ├── routes/
+│   │   └── orders.py     # POST /orders, GET /orders, GET /orders/{id}
+│   └── services/
+│       ├── http_clients.py   # product/payment HTTP 클라이언트 (타임아웃, 에러 래핑)
+│       └── order_service.py  # Saga 오케스트레이션 비즈니스 로직
+├── test/
+├── .env.example
+├── pytest.ini
+└── requirements.txt
+```
+
+#### 엔드포인트
+
+- `POST /orders`
+  - 기능: 주문 생성 (Saga 오케스트레이션 실행)
+  - 인증: gateway가 전달한 `X-User-ID` 헤더 (바디 수신 금지)
+  - 입력: `items: [{product_id, quantity}]` (동일 product_id 중복 불가, 수량 1~100)
+  - 처리:
+    1. 상품 정보 일괄 조회 (가격·활성화 여부 확인)
+    2. 총액 계산 후 Order + OrderItems DB 저장 (`PENDING` / `STARTED`)
+    3. 재고 차감 순차 처리 (실패 시 이미 차감된 재고 즉시 롤백)
+    4. `STOCK_DEDUCTED` 상태 커밋
+    5. 결제 요청
+    6. 성공 시 `COMPLETED` + NATS `order.completed` 발행
+    7. 결제 실패 시 재고 롤백 후 `FAILED`
+  - 응답: 주문 상세 (`OrderResponse`, items 포함)
+  - 실패 응답:
+    - `404` — 존재하지 않는 상품
+    - `402` — 결제 거절
+    - `409` — 재고 부족 또는 낙관적 락 충돌
+    - `422` — 비활성 상품 또는 중복 product_id
+    - `503/504` — 하위 서비스 불가 또는 타임아웃
+
+- `GET /orders`
+  - 기능: 내 주문 목록 조회
+  - 인증: `X-User-ID` 헤더
+  - 지원: 페이지네이션 (`page`, `page_size`), 최신 주문 먼저 정렬
+  - 응답: `OrderListResponse` 목록 (items 제외, 요약 응답)
+
+- `GET /orders/{order_id}`
+  - 기능: 주문 상세 조회
+  - 인증: `X-User-ID` 헤더
+  - 응답: `OrderResponse` (items 포함, selectinload)
+  - 실패 응답:
+    - `403` — 타인 주문 접근 시도 (IDOR 방어)
+    - `404` — 주문 없음
+
+- `GET /health`
+  - 기능: 헬스체크 (k8s liveness probe용)
+  - 응답: 서비스 상태 + NATS 연결 상태 (`nats_connected`)
+
+#### Saga 오케스트레이션 상태 전이
+
+```text
+STARTED
+  → STOCK_DEDUCTED   (stock_deducted = True 커밋)
+  → PAYMENT_REQUESTED
+  → COMPLETED
+
+결제 실패 시:
+PAYMENT_REQUESTED
+  → STOCK_ROLLBACK_NEEDED  (먼저 커밋 — 장애 복구 배치 스캔 근거)
+  → STOCK_ROLLED_BACK      (롤백 성공)
+     OR STOCK_ROLLBACK_NEEDED (롤백 실패, best-effort)
+  → FAILED
+```
+
+#### 낙관적 잠금 재시도 전략
+
+- 재고 차감 시 `VERSION_CONFLICT(409)` 수신 시 상품을 재조회하여 최신 `version`을 확보 후 재시도
+- 최대 `max_optimistic_retry`(기본값: 3)회 반복, 초과 시 `ORDER_STOCK_CONFLICT(409)` 반환
+- 설정: `MAX_OPTIMISTIC_RETRY` 환경변수로 조정 가능
+
+#### 관찰성 메트릭
+
+| 메트릭 이름 | 타입 | 설명 |
+| ----------- | ---- | ---- |
+| `order_created_total` | Counter | 주문 생성 요청 총 횟수 |
+| `order_completed_total` | Counter | 주문 완료 횟수 |
+| `order_failed_total` | Counter | 주문 실패 횟수 (`reason` 레이블) |
+| `order_amount_krw` | Histogram | 주문 금액 분포 (원단위) |
+| `saga_stock_rollback_total` | Counter | 재고 롤백 보상 트랜잭션 횟수 |
+
+#### NATS 이벤트
+
+- `order.completed` 이벤트 발행 (notification-service 소비)
+- 페이로드: `{ order_id, user_id, total_amount, payment_id }`
+- best-effort: NATS 연결 실패 또는 발행 실패 시 주문은 `COMPLETED` 유지, 로그만 기록
+- 향후 outbox 패턴으로 교체하면 at-least-once 보장 가능
+
+#### 설계 의도
+
+- 분산 트랜잭션 대신 Orchestration Saga를 사용해 복구 가능한 실패 흐름을 만든다.
+- 상품명과 단가를 스냅샷으로 저장해 이후 상품 변경과 무관하게 주문 이력을 보존한다.
+- `STOCK_ROLLBACK_NEEDED`를 결제 실패 즉시 커밋해, 서버 크래시 시에도 배치 잡이 미완료 보상 트랜잭션을 감지·재실행할 수 있다.
+- NATS 커넥션을 싱글턴으로 관리해 요청마다 연결을 생성하는 오버헤드를 없앤다.
+
+---
+
 ## 4. 예정 서비스 기능 정의
 
 ### 4.1 api-gateway
@@ -278,66 +417,7 @@
 
 ---
 
-### 4.2 order-service
-
-#### 역할
-
-`order-service`는 시스템의 오케스트레이터다. 주문 생성, 주문 조회, 재고 차감 요청, 결제 요청, 주문 저장, 이벤트 발행을 한 흐름으로 조율한다.
-
-#### 저장소
-
-- PostgreSQL: `orders`, `order_items`
-
-#### 핵심 데이터
-
-- `orders`: 사용자 ID, 총액, 주문 상태, Saga 상태, 실패 원인, 결제 ID
-- `order_items`: 상품 ID, 상품명 스냅샷, 단가 스냅샷, 수량, 할인액, 소계
-
-#### 예상 엔드포인트
-
-- `POST /orders`
-  - 기능: 주문 생성
-  - 입력: 상품 목록, 수량
-  - 인증: gateway가 전달한 `X-User-ID`
-  - 처리:
-    1. 주문 요청 검증
-    2. 상품별 재고 차감 요청
-    3. 결제 요청
-    4. 성공 시 주문/주문항목 저장
-    5. `order.completed` 이벤트 발행
-
-- `GET /orders`
-  - 기능: 내 주문 목록 조회
-
-- `GET /orders/{id}`
-  - 기능: 주문 상세 조회
-
-#### Saga 오케스트레이션
-
-- 상태 전이:
-  - `STARTED`
-  - `STOCK_DEDUCTED`
-  - `PAYMENT_REQUESTED`
-  - `COMPLETED`
-- 결제 실패 시:
-  - `STOCK_ROLLBACK_NEEDED`
-  - `STOCK_ROLLED_BACK`
-  - `FAILED`
-
-#### 실패 처리 원칙
-
-- 재고 차감 실패 시 즉시 주문 실패
-- 결제 실패 시 재고 롤백 시도
-- 롤백 필요 여부는 `stock_deducted`와 `saga_status`로 판단
-
-#### 설계 의도
-
-- 분산 트랜잭션 대신 Orchestration Saga를 사용해 복구 가능한 실패 흐름을 만든다.
-- 상품명과 단가를 스냅샷으로 저장해 이후 상품 변경과 무관하게 주문 이력을 보존한다.
-
----
-
-### 4.3 notification-service
+### 4.2 notification-service
 
 #### 역할
 
@@ -358,17 +438,48 @@
 
 1. Client → `api-gateway`
 2. `api-gateway` → `order-service`
-3. `order-service` → `product-service` 재고 차감 (`X-Internal-Token`)
-4. `order-service` → `payment-service` 결제 요청 (`X-Internal-Token`)
-5. `order-service` → `order-db` 저장
-6. `order-service` → NATS `order.completed`
-7. `notification-service` 소비
+3. `order-service` → `product-service` 상품 조회 (`GET /products/{id}`)
+4. `order-service` → `product-service` 재고 차감 (`POST /products/{id}/deduct-stock`, `X-Internal-Token`)
+5. `order-service` → `payment-service` 결제 요청 (`POST /payments`, `X-Internal-Token`)
+6. `order-service` → `order-db` 저장
+7. `order-service` → NATS `order.completed`
+8. `notification-service` 소비
 
 ### 주문 생성 실패 경로
 
-- 재고 부족: 주문 즉시 실패
-- 결제 실패 (`402 PAYMENT_REJECTED`): 재고 롤백 후 실패
-- 롤백 미완료: Saga 상태로 남기고 후속 복구 대상 처리
+- 상품 미존재/비활성: 주문 생성 전 즉시 실패 (Order DB 저장 없음)
+- 재고 부족: 지금까지 차감된 재고 롤백(`restore-stock`) 후 FAILED
+- 결제 실패 (`402 PAYMENT_REJECTED`): 재고 롤백 후 FAILED
+- 롤백 미완료: `STOCK_ROLLBACK_NEEDED` 상태로 남기고 후속 복구 배치 대상 처리
+
+### product-service 호출 규격
+
+```python
+# order-service → product-service (상품 조회)
+GET /products/{product_id}
+# 성공 응답 (200)
+{ "id": int, "name": str, "price": int, "stock": int, "version": int, "is_active": bool, ... }
+
+# order-service → product-service (재고 차감)
+POST /products/{product_id}/deduct-stock
+Headers:
+  X-Internal-Token: {INTERNAL_SERVICE_TOKEN}
+Body:
+  { "quantity": int, "expected_version": int }
+# 성공 응답 (200)
+{ "product_id": int, "remaining_stock": int, "new_version": int }
+# 실패 응답 (409)
+{ "detail": { "detail": "...", "code": "VERSION_CONFLICT" | "INSUFFICIENT_STOCK" } }
+
+# order-service → product-service (재고 복구, 보상 트랜잭션)
+POST /products/{product_id}/restore-stock
+Headers:
+  X-Internal-Token: {INTERNAL_SERVICE_TOKEN}
+Body:
+  { "quantity": int }
+# 성공 응답 (200)
+{ "product_id": int, "remaining_stock": int, "new_version": int }
+```
 
 ### payment-service 호출 규격
 
@@ -391,9 +502,8 @@ Body:
 
 ## 6. 구현 우선순위
 
-1. ⏳ `order-service` — payment/product 호출 계약 확정 후 Saga 구현
-2. ⏳ `api-gateway`
-3. ⏳ `notification-service`
+1. ⏳ `api-gateway`
+2. ⏳ `notification-service`
 
 ---
 

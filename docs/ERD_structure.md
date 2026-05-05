@@ -1,6 +1,6 @@
 # MicroMart — ERD 설계 문서
 
-> 최종 확정일: 2026-05-04
+> 최종 확정일: 2026-05-05
 > 설계 기준: MSA Database per Service 원칙
 > 서비스 간 물리적 FK 없음 — 논리적 ID 참조만 사용
 
@@ -57,7 +57,7 @@ class RefundStatus(str, enum.Enum):
     FAILED = "FAILED"         # 환불 실패
 ```
 
-> ⚠️ payment-service에서는 SQLite 테스트 환경의 BigInteger autoincrement 미지원 문제를 해결하기 위해
+> ⚠️ order-service와 payment-service에서는 SQLite 테스트 환경의 BigInteger autoincrement 미지원 문제를 해결하기 위해
 > `BigIntegerType` 커스텀 TypeDecorator를 사용한다.
 > PostgreSQL에서는 `BigInteger`로, SQLite(테스트)에서는 `Integer`로 자동 분기된다.
 
@@ -118,7 +118,7 @@ class RefundStatus(str, enum.Enum):
 | `status` | String(OrderStatus) | NOT NULL | 주문 상태. Enum 값만 허용 |
 | `total_amount` | Integer | NOT NULL | 주문 시점 총액 스냅샷 (원단위). 이후 상품 가격 변경에 영향받지 않음 |
 | `payment_id` | BigInteger | NULLABLE | payment-service `payments.id` 논리적 참조. 결제 완료 후 기입 |
-| `failure_reason` | String | NULLABLE | 실패 원인 분류 문자열. 관찰성(Loki) 메트릭 레이블용 |
+| `failure_reason` | String(200) | NULLABLE | 실패 원인 분류 문자열. 관찰성(Loki) 메트릭 레이블용 |
 | `saga_status` | String(SagaStatus) | NOT NULL, DEFAULT `'STARTED'` | Orchestration Saga 상태 추적. 보상 트랜잭션 판단 근거 |
 | `stock_deducted` | Boolean | NOT NULL, DEFAULT `false` | 재고 차감 완료 여부. 결제 실패 시 보상 트랜잭션(재고 복구) 실행 여부 판단 |
 | `created_at` | DateTime(tz) | NOT NULL, server_default | |
@@ -135,9 +135,9 @@ class RefundStatus(str, enum.Enum):
 | `id` | BigInteger | PK, AI | |
 | `order_id` | BigInteger | NOT NULL, INDEX, **FK → orders.id** | 동일 DB 내 물리적 FK 허용 |
 | `product_id` | BigInteger | NOT NULL | product-service `products.id` 논리적 참조 |
-| `product_name` | String | NOT NULL | **주문 시점 상품명 스냅샷**. 이후 상품명 변경·삭제에 영향받지 않음 |
+| `product_name` | String(200) | NOT NULL | **주문 시점 상품명 스냅샷**. 이후 상품명 변경·삭제에 영향받지 않음 |
 | `unit_price` | Integer | NOT NULL | **주문 시점 단가 스냅샷**. 정산·환불 기준가 |
-| `quantity` | Integer | NOT NULL, CHECK(`quantity > 0`) | |
+| `quantity` | Integer | NOT NULL, CHECK(`quantity > 0`) | 단건 최대 100개 제한 (schemas.py 검증) |
 | `discount_amount` | Integer | NOT NULL, DEFAULT `0` | 쿠폰·프로모션 할인액. 향후 기능 확장 대비 |
 | `subtotal` | Integer | NOT NULL | `unit_price * quantity - discount_amount`. 파생값이지만 할인 적용 후 실결제액이 수식과 다를 수 있어 명시적 저장 |
 | `created_at` | DateTime(tz) | NOT NULL, server_default | |
@@ -148,6 +148,7 @@ class RefundStatus(str, enum.Enum):
 설계 결정 이유
 
 - 스냅샷 저장 이유: MSA에서 product-service DB는 order-service에서 직접 조회 불가. 상품이 삭제되거나 가격이 변경되어도 주문 당시 데이터로 **CS 처리, 정산, 환불**이 가능해야 함.
+- 중복 product_id 입력 차단: `OrderCreateRequest.check_duplicate_product_ids` validator로 동일 요청 내 중복 상품 ID를 `422`로 차단. 중복 시 총액 계산 오류 및 이중 재고 차감 방지.
 
 ---
 
@@ -234,3 +235,4 @@ STARTED
 | ------ | ----------- |
 | 2026-05-03 | 최초 ERD 확정 (user, product, order, payment, refunds) |
 | 2026-05-04 | payment-service 구현 완료 반영: `BigIntegerType` 커스텀 타입 추가 주석, `payments.status` DEFAULT `'PENDING'` 명시, `refunds.updated_at` 부재 설계 의도 추가, `PENDING` 선생성 설계 의도 추가 |
+| 2026-05-05 | order-service 구현 완료 반영: `BigIntegerType` 적용 범위를 order-service까지 확장 명시, `order_items.quantity` 단건 최대 100개 제한 추가, 중복 product_id 차단 설계 의도 추가 |
