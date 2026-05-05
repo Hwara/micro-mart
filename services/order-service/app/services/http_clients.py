@@ -209,7 +209,7 @@ async def deduct_stock(product_id: int, quantity: int, expected_version: int) ->
     raise ProductServiceError("재고 차감 실패", code="STOCK_DEDUCT_ERROR", status_code=500)
 
 
-async def restore_stock(product_id: int, quantity: int) -> None:
+async def restore_stock(product_id: int, quantity: int) -> bool:
     """
     product-service 재고 복구 요청 (보상 트랜잭션).
 
@@ -231,7 +231,7 @@ async def restore_stock(product_id: int, quantity: int) -> None:
 
         if resp.status_code == 200:
             log.info("재고 복구 성공 (보상 트랜잭션)", product_id=product_id, quantity=quantity)
-            return
+            return True
 
         log.error(
             "재고 복구 실패 (보상 트랜잭션)",
@@ -239,6 +239,7 @@ async def restore_stock(product_id: int, quantity: int) -> None:
             quantity=quantity,
             http_status=resp.status_code,
         )
+        return False
     except Exception as e:
         # 보상 트랜잭션 실패는 별도 복구 배치가 처리 — 여기선 로그만 남김
         log.error(
@@ -247,6 +248,7 @@ async def restore_stock(product_id: int, quantity: int) -> None:
             quantity=quantity,
             error=str(e),
         )
+        return False
 
 
 async def request_payment(order_id: int, user_id: int, amount: int) -> dict:

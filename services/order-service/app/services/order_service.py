@@ -219,8 +219,10 @@ async def create_order(
         # 재고 복구 (best-effort)
         rollback_success = True
         for pid, qty in deducted_items:
-            await http_clients.restore_stock(pid, qty)
+            ok = await http_clients.restore_stock(pid, qty)
             # restore_stock은 내부에서 예외를 흡수하므로 여기선 성공 여부 추적만
+            if not ok:
+                rollback_success = False
 
         order.status = OrderStatus.FAILED
         order.saga_status = SagaStatus.STOCK_ROLLED_BACK if rollback_success else SagaStatus.FAILED
