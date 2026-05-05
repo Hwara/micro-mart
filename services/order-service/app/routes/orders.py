@@ -12,12 +12,9 @@ user_id는 항상 X-User-ID 헤더에서 추출 (바디 수신 금지).
 
 import structlog
 from fastapi import APIRouter, Depends, Query, status
-from sqlalchemy import select
-from sqlalchemy.orm import selectinload
 
 from ..database import DBSession
 from ..dependencies import get_current_user_id
-from ..models import Order
 from ..schemas import OrderCreateRequest, OrderListResponse, OrderResponse
 from ..services import order_service
 
@@ -89,23 +86,4 @@ async def get_order(
     주문 상세 조회 — items(order_items) eager load 포함.
     본인 주문만 조회 가능 (IDOR 방어: user_id 검증).
     """
-    # eager load: selectinload로 N+1 방지
-    result = await db.execute(
-        select(Order).options(selectinload(Order.items)).where(Order.id == order_id)
-    )
-    order = result.scalar_one_or_none()
-
-    from fastapi import HTTPException
-
-    if not order:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail={"detail": "주문을 찾을 수 없습니다.", "code": "ORDER_NOT_FOUND"},
-        )
-    if order.user_id != user_id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail={"detail": "접근 권한이 없습니다.", "code": "FORBIDDEN"},
-        )
-
-    return OrderResponse.model_validate(order)
+    return await order_service.get_order(db=db, order_id=order_id, user_id=user_id)
