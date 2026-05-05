@@ -228,9 +228,16 @@ async def create_order(
         order.saga_status = SagaStatus.STOCK_ROLLED_BACK if rollback_success else SagaStatus.FAILED
         await db.commit()
 
+        _payment_status_map = {
+            402: status.HTTP_402_PAYMENT_REQUIRED,  # 정상 결제 거절
+            504: status.HTTP_504_GATEWAY_TIMEOUT,  # 타임아웃
+            503: status.HTTP_503_SERVICE_UNAVAILABLE,  # 서비스 불가
+        }
+        http_status = _payment_status_map.get(e.status_code, status.HTTP_502_BAD_GATEWAY)
+
         order_failed_counter.add(1, {"reason": e.code})
         raise HTTPException(
-            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            status_code=http_status,
             detail={"detail": str(e), "code": e.code},
         ) from e
 
