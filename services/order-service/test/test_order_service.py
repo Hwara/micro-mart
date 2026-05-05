@@ -84,9 +84,11 @@ class TestCreateOrderSuccess:
             user_id=TEST_USER_ID,
             payload=_single_item_payload(product_id=1, quantity=2),
         )
+        result_db = await db_session.execute(select(Order))
+        order = result_db.scalar_one()
 
         assert result.status == OrderStatus.COMPLETED
-        assert result.saga_status == SagaStatus.COMPLETED
+        assert order.saga_status == SagaStatus.COMPLETED
         assert result.total_amount == 20000  # 10000 * 2
         assert result.payment_id == payment["id"]
         assert len(result.items) == 1

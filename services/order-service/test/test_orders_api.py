@@ -84,6 +84,21 @@ class TestOrdersAPIValidation:
         )
         assert response.status_code == 422
 
+    @pytest.mark.asyncio
+    async def test_중복_product_id_422(self, client):
+        """동일 product_id가 두 번 포함되면 422."""
+        response = await client.post(
+            "/orders",
+            json={
+                "items": [
+                    {"product_id": 1, "quantity": 2},
+                    {"product_id": 1, "quantity": 3},
+                ]
+            },
+            headers=user_headers(),
+        )
+        assert response.status_code == 422
+
 
 class TestOrdersAPISuccess:
     """주문 생성 정상 흐름 API 레벨 검증."""

@@ -7,7 +7,7 @@ OrderResponse: order-service → 클라이언트 (ORM 모델 직접 노출 금�
 
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 # ── 요청 스키마 ──────────────────────────────────────────
 
@@ -26,6 +26,19 @@ class OrderCreateRequest(BaseModel):
     """
 
     items: list[OrderItemRequest] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def check_duplicate_product_ids(self) -> "OrderCreateRequest":
+        """
+        동일 product_id가 두 번 들어오면 deduct_stock이 두 번 호출되나
+        products 딕셔너리에는 마지막 값만 남아 총액 계산이 틀어짐.
+        입력 단에서 422로 차단.
+        """
+        product_ids = [item.product_id for item in self.items]
+        if len(product_ids) != len(set(product_ids)):
+            duplicates = [pid for pid in set(product_ids) if product_ids.count(pid) > 1]
+            raise ValueError(f"중복된 product_id가 포함되어 있습니다: {duplicates}")
+        return self
 
 
 # ── 응답 스키마 ──────────────────────────────────────────
@@ -48,7 +61,6 @@ class OrderResponse(BaseModel):
     id: int
     user_id: int
     status: str
-    saga_status: str
     total_amount: int
     payment_id: int | None
     failure_reason: str | None
