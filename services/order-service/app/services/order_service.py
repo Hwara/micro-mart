@@ -178,7 +178,9 @@ async def create_order(
 
             order.status = OrderStatus.FAILED
             order.saga_status = (
-                SagaStatus.STOCK_ROLLED_BACK if rollback_success else SagaStatus.FAILED
+                SagaStatus.STOCK_ROLLED_BACK
+                if rollback_success
+                else SagaStatus.STOCK_ROLLBACK_NEEDED
             )
             order.failure_reason = e.code
             await db.commit()
@@ -233,7 +235,9 @@ async def create_order(
                 rollback_success = False
 
         order.status = OrderStatus.FAILED
-        order.saga_status = SagaStatus.STOCK_ROLLED_BACK if rollback_success else SagaStatus.FAILED
+        order.saga_status = (
+            SagaStatus.STOCK_ROLLED_BACK if rollback_success else SagaStatus.STOCK_ROLLBACK_NEEDED
+        )
         await db.commit()
 
         _payment_status_map = {
