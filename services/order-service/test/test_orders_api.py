@@ -100,7 +100,7 @@ class TestOrdersAPISuccess:
         )
         mocker.patch(
             "app.services.order_service.http_clients.deduct_stock",
-            new=AsyncMock(return_value=2),
+            new=AsyncMock(return_value=None),
         )
         mocker.patch(
             "app.services.order_service.http_clients.request_payment",
