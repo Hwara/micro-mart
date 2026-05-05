@@ -45,7 +45,9 @@ async def lifespan(app: FastAPI):
     try:
         import nats as nats_lib
 
-        nc = await nats_lib.connect(settings.nats_url, connect_timeout=300)
+        nc = await nats_lib.connect(
+            settings.nats_url, connect_timeout=settings.nats_connect_timeout_seconds
+        )
         set_nats_client(nc)
         logger.info("NATS 커넥션 연결 완료", nats_url=settings.nats_url)
     except Exception as e:

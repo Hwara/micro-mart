@@ -35,7 +35,8 @@ class Settings(BaseSettings):
     nats_url: str = "nats://nats:4222"
 
     # 서비스 간 HTTP 호출 타임아웃 (초) — 명시적 timeout 강제 (dev_convention.md §12)
-    http_timeout_seconds: float = 300
+    http_timeout_seconds: float = 5.0
+    nats_connect_timeout_seconds: int = 5
 
     otel_exporter_otlp_endpoint: str = "http://localhost:4317"
 
