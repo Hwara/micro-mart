@@ -44,7 +44,7 @@ class Settings(BaseSettings):
     otel_exporter_otlp_endpoint: str = "http://localhost:4317"
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=env_path,
         env_file_encoding="utf-8",
         extra="ignore",
     )
