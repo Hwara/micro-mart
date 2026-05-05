@@ -27,6 +27,9 @@ class Settings(BaseSettings):
     # 서비스 간 호출용 내부 토큰 (X-Internal-Token 헤더에 사용)
     internal_service_token: str
 
+    # 낙관적 락 충돌 시 재시도 횟수
+    max_optimistic_retry: int = 3
+
     # 하위 서비스 URL — docker-compose 네트워크 내 서비스명으로 설정
     product_service_url: str = "http://product-service:8000"
     payment_service_url: str = "http://payment-service:8000"

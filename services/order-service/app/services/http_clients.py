@@ -18,12 +18,6 @@ from ..config import get_settings
 log = structlog.get_logger(__name__)
 
 
-# 낙관적 잠금 충돌 시 최대 재시도 횟수
-# 3회 이상이면 해당 상품에 극심한 경합이 있다는 의미 → 포기하고 실패 처리
-# TODO: settings로 보내 환경변수로 변경할 수 있도록 할 것
-MAX_OPTIMISTIC_RETRY = 3
-
-
 class ProductServiceError(Exception):
     """product-service 호출 실패를 래핑하는 예외."""
 
@@ -93,17 +87,22 @@ async def deduct_stock(product_id: int, quantity: int, expected_version: int) ->
 
     VERSION_CONFLICT(409) 시 재시도 전략:
     - 상품을 재조회해 최신 version 확보 후 재시도
-    - 최대 MAX_OPTIMISTIC_RETRY(3)회 반복
+    - 최대 max_optimistic_retry(기본 값 : 3)회 반복
     - 모두 실패 시 ORDER_STOCK_CONFLICT 에러 발생
 
     """
     settings = get_settings()
+
+    # 낙관적 잠금 충돌 시 최대 재시도 횟수
+    # 3회 이상이면 해당 상품에 극심한 경합이 있다는 의미 → 포기하고 실패 처리
+    max_optimistic_retry = settings.max_optimistic_retry
+
     url = f"{settings.product_service_url}/products/{product_id}/deduct-stock"
     headers = {"X-Internal-Token": settings.internal_service_token}
 
     current_version = expected_version
 
-    for attempt in range(1, MAX_OPTIMISTIC_RETRY + 1):
+    for attempt in range(1, max_optimistic_retry + 1):
         body = {"quantity": quantity, "expected_version": current_version}
 
         try:
@@ -147,7 +146,7 @@ async def deduct_stock(product_id: int, quantity: int, expected_version: int) ->
                 attempt=attempt,
                 tried_version=current_version,
             )
-            if attempt < MAX_OPTIMISTIC_RETRY:
+            if attempt < max_optimistic_retry:
                 try:
                     # 최신 상태 재조회해서 version 갱신
                     fresh = await get_product(product_id)
@@ -166,14 +165,14 @@ async def deduct_stock(product_id: int, quantity: int, expected_version: int) ->
                         status_code=503,
                     ) from e
             else:
-                # MAX_OPTIMISTIC_RETRY 소진 → 경합이 너무 심한 상태
+                # max_optimistic_retry 소진 → 경합이 너무 심한 상태
                 log.error(
                     "낙관적 잠금 재시도 횟수 초과",
                     product_id=product_id,
-                    max_retry=MAX_OPTIMISTIC_RETRY,
+                    max_retry=max_optimistic_retry,
                 )
                 raise ProductServiceError(
-                    f"재고 차감 충돌이 {MAX_OPTIMISTIC_RETRY}회 반복됐습니다. "
+                    f"재고 차감 충돌이 {max_optimistic_retry}회 반복됐습니다. "
                     + "잠시 후 다시 시도해주세요.",
                     code="ORDER_STOCK_CONFLICT",
                     status_code=409,
