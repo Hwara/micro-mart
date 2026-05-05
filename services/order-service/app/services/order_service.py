@@ -14,14 +14,18 @@ order-service 비즈니스 로직 — Saga 오케스트레이션
   - 재고 복구 실패 시 FAILED로 처리하되 로그 남김 (배치 복구 대상)
 """
 
+import json
+
 import structlog
+from fastapi import HTTPException, status
 from opentelemetry import metrics
-from sqlalchemy import select
+from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from ..models import Order, OrderItem, OrderStatus, SagaStatus
-from ..schemas import OrderCreateRequest, OrderResponse
+from ..nats_client import get_nats_client
+from ..schemas import OrderCreateRequest, OrderListResponse, OrderResponse
 from . import http_clients
 from .http_clients import PaymentServiceError, ProductServiceError
 
@@ -66,7 +70,6 @@ async def create_order(
     - 재고 차감 실패: Order FAILED 저장 후 HTTPException
     - 결제 실패: 재고 롤백 후 Order FAILED 저장, HTTPException
     """
-    from fastapi import HTTPException, status
 
     order_created_counter.add(1)
 
@@ -284,9 +287,6 @@ async def _publish_order_completed(order: Order) -> None:
     실패해도 주문은 COMPLETED 유지 (best-effort).
     향후 outbox 패턴으로 교체하면 at-least-once 보장 가능.
     """
-    import json
-
-    from ..nats_client import get_nats_client
 
     try:
         nc = get_nats_client()
@@ -317,8 +317,6 @@ async def get_order(db: AsyncSession, order_id: int, user_id: int) -> OrderRespo
 
     본인 주문만 조회 가능 — user_id 검증 (외부에서 넘어온 order_id만으로 조회 금지).
     """
-    from fastapi import HTTPException, status
-    from sqlalchemy.orm import selectinload
 
     result = await db.execute(
         select(Order).options(selectinload(Order.items)).where(Order.id == order_id)
@@ -352,9 +350,6 @@ async def list_orders(
 
     최신 주문 먼저 정렬. items는 포함하지 않음 (목록용 요약 응답).
     """
-    from sqlalchemy import desc
-
-    from ..schemas import OrderListResponse
 
     offset = (page - 1) * page_size
     result = await db.execute(
