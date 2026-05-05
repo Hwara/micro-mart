@@ -31,7 +31,8 @@ log = structlog.get_logger(__name__)
     status_code=status.HTTP_201_CREATED,
     responses={
         402: {"description": "결제 거절"},
-        422: {"description": "재고 부족 또는 비활성 상품"},
+        409: {"description": "재고 부족 또는 낙관적 락 충돌"},
+        422: {"description": "비활성 상품"},
         503: {"description": "하위 서비스 불가"},
     },
     summary="주문 생성",
