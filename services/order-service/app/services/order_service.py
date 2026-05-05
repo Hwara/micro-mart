@@ -349,7 +349,7 @@ async def list_orders(
     user_id: int,
     page: int = 1,
     page_size: int = 20,
-) -> list:
+) -> list[OrderListResponse]:
     """
     내 주문 목록 조회 (페이지네이션).
 
