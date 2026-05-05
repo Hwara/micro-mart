@@ -170,6 +170,7 @@ async def create_order(
                 code=e.code,
             )
             # 지금까지 차감된 재고 롤백
+            rollback_success = True
             for pid, qty in deducted_items:
                 ok = await http_clients.restore_stock(pid, qty)
                 if not ok:
