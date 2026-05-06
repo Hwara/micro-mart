@@ -9,7 +9,7 @@ order-service의 order_service.py 패턴과 동일하게 meter.create_*()로 생
   gateway_request_duration_ms   - 요청 처리 레이턴시 분포 (ms)
   gateway_auth_total            - JWT 검증 결과 (result: success | failure)
   gateway_auth_failure_total    - JWT 검증 실패 횟수 (reason 레이블)
-  gateway_jwks_cache_hit_total  - JWKS 캐시 히트/미스 (result: hit | miss)
+  gateway_jwks_cache_total      - JWKS 캐시 히트/미스 (result: hit | miss)
   gateway_rate_limit_total      - Rate Limit 차단 횟수
 
 path_group 레이블 설계:
