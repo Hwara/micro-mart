@@ -24,10 +24,32 @@ logger = structlog.get_logger(__name__)
 
 router = APIRouter()
 
+# RFC 7230 hop-by-hop 헤더 — 프록시가 제거해야 하는 헤더 목록
+# 이 헤더들은 단일 전송 구간에만 적용되며 end-to-end로 전달하면 안 됨
+_HOP_BY_HOP_HEADERS = frozenset(
+    {
+        "connection",
+        "keep-alive",
+        "transfer-encoding",
+        "te",
+        "trailers",
+        "upgrade",
+        "proxy-authenticate",
+        "proxy-authorization",
+        "host",  # 하위 서비스 호스트로 덮어써야 하므로 제거
+        "content-length",  # httpx가 재계산
+    }
+)
+
 
 # 경로 prefix → 서비스 URL 매핑
 def _get_target_url(path: str) -> str | None:
-    """요청 경로를 보고 라우팅할 하위 서비스 URL을 결정한다."""
+    """
+    요청 경로를 보고 라우팅할 하위 서비스 URL을 결정한다.
+
+    startswith("/auth") 대신 "/auth" == path or startswith("/auth/") 패턴 사용.
+    이유: /authz, /products-old 같은 유사 경로가 잘못 라우팅되는 버그 방지.
+    """
     settings = get_settings()
 
     # gateway 자체 처리 경로 — 하위 서비스로 프록시하지 않음
@@ -49,35 +71,58 @@ async def _proxy_request(request: Request, target_url: str) -> Response:
     """
     httpx로 하위 서비스에 요청을 프록시한다.
 
-    - 원본 헤더를 그대로 전달 (X-User-ID, X-User-Role 포함)
-    - host 헤더는 제거 (하위 서비스의 host와 충돌 방지)
-    - 응답 body를 스트리밍으로 반환 (대용량 응답 메모리 절약)
+    에러 처리:
+      TimeoutException → 504 Gateway Timeout
+      RequestError     → 503 Service Unavailable
+      기타 예외        → 502 Bad Gateway
     """
     settings = get_settings()
 
-    # host 헤더 제거 — 프록시 시 하위 서비스의 호스트가 덮어쓰여야 함
-    headers = {
-        k: v for k, v in request.headers.items() if k.lower() not in ("host", "content-length")
-    }
+    # hop-by-hop 헤더 및 proxy 헤더 제거 (소문자 비교)
+    headers = {k: v for k, v in request.headers.items() if k.lower() not in _HOP_BY_HOP_HEADERS}
 
     body = await request.body()
     url = f"{target_url}{request.url.path}"
     if request.url.query:
         url = f"{url}?{request.url.query}"
 
-    async with httpx.AsyncClient(timeout=settings.http_timeout_seconds) as client:
-        proxy_resp = await client.request(
-            method=request.method,
-            url=url,
-            headers=headers,
-            content=body,
+    try:
+        async with httpx.AsyncClient(timeout=settings.http_timeout_seconds) as client:
+            proxy_resp = await client.request(
+                method=request.method,
+                url=url,
+                headers=headers,
+                content=body,
+            )
+    except httpx.TimeoutException as e:
+        # 하위 서비스 응답 타임아웃 — order-service 패턴과 동일하게 504
+        logger.warning(
+            "하위 서비스 타임아웃",
+            target_url=url,
+            timeout=settings.http_timeout_seconds,
+            error=str(e),
+        )
+        return Response(
+            status_code=504,
+            content='{"detail": "하위 서비스 응답 시간 초과", "code": "GATEWAY_TIMEOUT"}',
+            media_type="application/json",
+        )
+    except httpx.RequestError as e:
+        # 네트워크 오류, DNS 실패, 연결 거부 등 — 503
+        logger.error(
+            "하위 서비스 연결 실패",
+            target_url=url,
+            error=str(e),
+        )
+        return Response(
+            status_code=503,
+            content='{"detail": "하위 서비스를 사용할 수 없습니다", "code": "SERVICE_UNAVAILABLE"}',
+            media_type="application/json",
         )
 
     # 응답 헤더 중 transfer-encoding은 StreamingResponse와 충돌하므로 제거
     resp_headers = {
-        k: v
-        for k, v in proxy_resp.headers.items()
-        if k.lower() not in ("transfer-encoding", "content-encoding")
+        k: v for k, v in proxy_resp.headers.items() if k.lower() not in _HOP_BY_HOP_HEADERS
     }
 
     return Response(
