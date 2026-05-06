@@ -33,6 +33,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
+from starlette.datastructures import MutableHeaders  # Starlette 공식 헤더 변조 API
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from shared.telemetry import RequestLoggingMiddleware, init_logging, init_telemetry
@@ -177,11 +178,9 @@ class AuthMiddleware(BaseHTTPMiddleware):
         user_id = str(payload.get("sub", ""))
         user_role = str(payload.get("role", "customer"))
 
-        # 헤더 주입: scope headers는 bytes 튜플 리스트 형태 (Starlette 내부 표현)
-        headers = dict(request.headers)
-        headers["x-user-id"] = user_id
-        headers["x-user-role"] = user_role
-        request.scope["headers"] = [(k.lower().encode(), v.encode()) for k, v in headers.items()]
+        mutable_headers = MutableHeaders(scope=request.scope)
+        mutable_headers.append("x-user-id", user_id)
+        mutable_headers.append("x-user-role", user_role)
 
         return await call_next(request)
 
