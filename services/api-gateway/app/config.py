@@ -32,7 +32,8 @@ class Settings(BaseSettings):
 
     # JWT 설정
     jwt_algorithm: str = "RS256"
-    jwt_audience: str = ""  # 빈 문자열이면 audience 검증 생략
+    # audience 설정 - 빈 문자열이면 audience 검증 생략이나 기본적으로 검증 활성화
+    jwt_audience: str = "change-me-in-production"
 
     # JWKS 캐시 TTL (초) — 공개키는 자주 바뀌지 않으므로 1시간 캐싱
     jwks_cache_ttl_seconds: int = 3600
