@@ -250,6 +250,9 @@ class TestJWKSCache:
         """
         import time
 
+        from app.config import get_settings as _get_settings
+
+        settings = _get_settings()
         token = make_access_token(sub="42")
         jwks = make_jwks_response()
 
@@ -263,8 +266,8 @@ class TestJWKSCache:
             await client.get("/orders", headers=auth_headers(token))
             assert jwks_route.call_count == 1
 
-            # 캐시를 강제로 만료 상태로 만듦 (fetched_at을 4000초 전으로)
-            jwks_cache._fetched_at = time.time() - 4000
+            # TTL 만료 시뮬레이션 — 설정값 기반으로 계산
+            jwks_cache._fetched_at = time.time() - (settings.jwks_cache_ttl_seconds + 1)
 
             # 두 번째 요청 — 캐시 만료, JWKS 재조회
             await client.get("/orders", headers=auth_headers(token))
