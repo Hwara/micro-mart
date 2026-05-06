@@ -31,16 +31,16 @@ def _get_target_url(path: str) -> str | None:
     settings = get_settings()
 
     # gateway 자체 처리 경로 — 하위 서비스로 프록시하지 않음
-    # /health, /docs, /openapi.json은 app 레벨에서 직접 처리
-    GATEWAY_OWN_PATHS = ("/health", "/docs", "/openapi.json")
-    if path in GATEWAY_OWN_PATHS or path.startswith("/docs/"):
+    # /health는 app 레벨에서 직접 처리
+    GATEWAY_OWN_PATHS = "/health"
+    if path in GATEWAY_OWN_PATHS:
         return None  # 라우터에 닿으면 안 되지만, 혹시 닿아도 None 반환
 
-    if path.startswith("/auth"):
+    if path == "/auth" or path.startswith("/auth/"):
         return settings.user_service_url
-    if path.startswith("/products"):
+    if path == "/products" or path.startswith("/products/"):
         return settings.product_service_url
-    if path.startswith("/orders"):
+    if path == "/orders" or path.startswith("/orders/"):
         return settings.order_service_url
     return None
 

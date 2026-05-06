@@ -28,11 +28,8 @@ logger = structlog.get_logger(__name__)
 
 PUBLIC_PATHS: list[tuple[str | None, str]] = [
     (None, "/health"),
-    (None, "/auth/"),
+    (None, "/auth"),
     ("GET", "/products"),
-    # FastAPI 내부 경로 — JWT 없이 접근 가능해야 함
-    ("GET", "/docs"),  # Swagger UI HTML
-    ("GET", "/openapi.json"),  # Swagger가 스펙을 로드하는 경로
 ]
 
 
@@ -109,12 +106,14 @@ def is_public_path(method: str, path: str) -> bool:
     """
     인증이 필요 없는 경로인지 확인.
 
-    PUBLIC_PATHS에 정의된 (method, prefix) 조합과 매칭.
-    method가 None이면 모든 HTTP 메서드에 적용.
+    path == prefix  OR  path.startswith(prefix + "/")
+    → "/products" prefix는 "/products" 와 "/products/123"만 허용.
+        "/products-old" 는 차단.
     """
     for allowed_method, prefix in PUBLIC_PATHS:
-        if path.startswith(prefix):
-            if allowed_method is None or allowed_method == method:
+        if allowed_method is None or allowed_method == method:
+            # 정확한 경계 매칭: /products 또는 /products/로 시작
+            if path == prefix.rstrip("/") or path.startswith(prefix.rstrip("/") + "/"):
                 return True
     return False
 
