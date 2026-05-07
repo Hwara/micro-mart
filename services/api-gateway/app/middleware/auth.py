@@ -13,6 +13,7 @@ JWT 검증 미들웨어
 - /products (GET): 비인증 상품 조회 허용
 """
 
+import asyncio
 import time
 
 import httpx
@@ -44,6 +45,7 @@ class JWKSCache:
     def __init__(self) -> None:
         self._keys: dict[str, RSAPublicKey] = {}
         self._fetched_at: float = 0.0
+        self._refresh_lock = asyncio.Lock()
 
     def _is_expired(self) -> bool:
         settings = get_settings()
@@ -89,8 +91,15 @@ class JWKSCache:
 
         # 캐시 만료 또는 kid 미매칭 → 미스로 기록 후 재조회
         gateway_jwks_cache_counter.add(1, {"result": "miss"})
-        logger.info("JWKS 캐시 미스 — 재조회 시작", kid=kid, expired=self._is_expired())
-        await self._refresh()
+        async with self._refresh_lock:
+            # Lock 대기 중 다른 코루틴이 이미 갱신했을 수 있으므로 재확인
+            lookup_kid = kid or next(iter(self._keys), None)
+            if not self._is_expired() and lookup_kid and lookup_kid in self._keys:
+                logger.info("JWKS Lock 대기 후 캐시 히트 — 재조회 생략", kid=kid)
+                return self._keys[lookup_kid]
+
+            logger.info("JWKS 캐시 미스 — 재조회 시작", kid=kid, expired=self._is_expired())
+            await self._refresh()
 
         lookup_kid = kid or next(iter(self._keys), None)
         if lookup_kid and lookup_kid in self._keys:
