@@ -54,7 +54,7 @@ def _get_target_url(path: str) -> str | None:
 
     # gateway 자체 처리 경로 — 하위 서비스로 프록시하지 않음
     # /health는 app 레벨에서 직접 처리
-    GATEWAY_OWN_PATHS = "/health"
+    GATEWAY_OWN_PATHS = {"/health"}
     if path in GATEWAY_OWN_PATHS:
         return None  # 라우터에 닿으면 안 되지만, 혹시 닿아도 None 반환
 
