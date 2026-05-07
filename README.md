@@ -93,9 +93,12 @@ flowchart LR
 
 외부 요청의 단일 진입점. JWT를 로컬에서 검증하고 내부 서비스로 라우팅합니다.
 
-- RS256 공개키를 user-service `/auth/jwks`에서 캐싱하여 로컬 검증
-- Rate Limiting, 요청/응답 구조화 로깅
-- **관찰성**: 전체 inbound 메트릭, 4xx/5xx 비율, Rate Limit 발동 횟수
+- RS256 공개키를 user-service `/auth/jwks`에서 캐싱하여 로컬 검증 (TTL 기반 자동 갱신)
+- Rate Limiting (SlowAPI, IP 기준, 분당 60 req)
+- 요청/응답 구조화 로깅
+- **미들웨어 실행 순서** (바깥→안): RequestLoggingMiddleware → MetricsMiddleware → AuthMiddleware → SlowAPIMiddleware
+- **공개 경로(인증 불필요)**: `/health`, `/auth/*`, `GET /products`
+- **관찰성**: `gateway_requests_total`, `gateway_request_duration_ms`, `gateway_auth_total`, `gateway_auth_failure_total`, `gateway_jwks_cache_total`, `gateway_rate_limit_total`
 
 ---
 
@@ -301,6 +304,8 @@ Tempo는 전 구간을 단일 트레이스로 표현하고, 각 서비스는 개
 | DB 커넥션 풀 고갈 | product-service 고부하 | DB pool 메트릭 + 연쇄 에러 트레이스 |
 | 알림 큐 적체 | notification-service 중단 후 재기동 | NATS 메시지 백로그 메트릭 |
 | Saga 보상 트랜잭션 | 결제 거절 발생 | `saga_stock_rollback_total` + Tempo 롤백 Span |
+| Rate Limit 발동 | 고빈도 요청 | `gateway_rate_limit_total` + 429 응답 |
+| JWT 만료/위조 | 잘못된 토큰 전달 | `gateway_auth_failure_total{reason="expired|invalid"}` |
 
 ---
 
@@ -315,6 +320,9 @@ Tempo는 전 구간을 단일 트레이스로 표현하고, 각 서비스는 개
 | 데이터베이스 | PostgreSQL (서비스별 독립) | MSA 원칙, 서비스 간 DB 공유 금지 |
 | 캐시 | Redis (redis.asyncio 5.x) | Refresh Token 저장, Cache-Aside 패턴 |
 | 메시지 큐 | NATS | 경량, Kubernetes 네이티브, 비동기 트레이스 전파 |
+| HTTP 클라이언트 | httpx | 비동기, OTel 자동 계측, 서비스 간 프록시 |
+| Rate Limiting | SlowAPI | IP 기반, FastAPI 통합 용이 |
+| JWT 검증 | PyJWT + cryptography | RS256 공개키 검증, python-jose 대비 유지보수 활성 |
 | 컨테이너 | Docker | 서비스별 독립 Dockerfile |
 | 오케스트레이션 | Kubernetes | 관찰성 스택 Helm 배포 환경 |
 | 부하 생성 | k6 | 시나리오 스크립트, Grafana 연동 |
@@ -326,14 +334,15 @@ Tempo는 전 구간을 단일 트레이스로 표현하고, 각 서비스는 개
 ```text
 micro-mart/
 ├── services/
-│   ├── api-gateway/              # 단일 진입점, JWT 검증, 라우팅
+│   ├── api-gateway/              # 단일 진입점, JWT 검증, 라우팅, Rate Limiting
 │   │   └── app/
-│   │       ├── main.py
+│   │       ├── main.py           # FastAPI 앱, lifespan (JWKS 워밍업), 미들웨어 등록
 │   │       ├── config.py
-│   │       ├── router.py
+│   │       ├── router.py         # catch-all 리버스 프록시
 │   │       └── middleware/
-│   │           ├── auth.py       # RS256 JWT 검증
-│   │           └── telemetry.py
+│   │           ├── auth.py       # RS256 JWT 검증, JWKS 인메모리 캐시
+│   │           ├── metrics.py    # OTel Counter/Histogram 메트릭 정의
+│   │           └── rate_limit.py # SlowAPI Rate Limiter
 │   ├── user-service/             # 회원가입, JWT 발급, Refresh Token
 │   │   └── app/
 │   │       ├── main.py
@@ -409,7 +418,7 @@ micro-mart/
 | `product-service` | ✅ 완료 | 상품 CRUD, Redis Cache-Aside, 낙관적 잠금 재고 차감·복구 |
 | `payment-service` | ✅ 완료 | 결제 시뮬레이션, Chaos Mode, 부분 환불, 비즈니스 메트릭 |
 | `order-service` | ✅ 완료 | Saga 오케스트레이션, 서비스 간 HTTP 호출, NATS 이벤트 발행 |
-| `api-gateway` | ⏳ 예정 | JWT 검증 미들웨어, 리버스 프록시 |
+| `api-gateway` | ✅ 완료 | JWT 검증 미들웨어(JWKS 캐시), 리버스 프록시, Rate Limiting, 관찰성 메트릭 |
 | `notification-service` | ⏳ 예정 | NATS 소비, 비동기 처리 |
 | Kubernetes 매니페스트 | ⏳ 예정 | Deployment, Service, ConfigMap, Secret |
 | k6 부하 스크립트 | ⏳ 예정 | 시나리오별 부하 생성 |

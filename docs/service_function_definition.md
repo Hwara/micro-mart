@@ -1,6 +1,6 @@
 # MicroMart — 서비스 기능 정의 문서
 
-> 최종 갱신일: 2026-05-05
+> 최종 갱신일: 2026-05-07
 > 목적: 서비스별 책임, 엔드포인트, 내부 동작, 서비스 간 호출 계약을 구현 전에 명확히 고정하기 위한 기능 정의 문서
 
 ---
@@ -24,7 +24,7 @@
 
 | 서비스 | 핵심 책임 | 저장소 |
 | -------- | ----------- | -------- |
-| `api-gateway` | JWT 검증, 라우팅, Rate Limiting, 요청 진입 제어 | 없음 |
+| `api-gateway` | JWT 검증, 라우팅, Rate Limiting, 요청 진입 제어, 관찰성 메트릭 | 없음 |
 | `user-service` | 회원가입, 로그인, JWT 발급, Refresh Token Rotation, 로그아웃 | PostgreSQL, Redis |
 | `product-service` | 상품 조회/등록/수정/삭제, 캐시 관리, 재고 차감, 재고 복구 | PostgreSQL, Redis |
 | `order-service` | 주문 생성/조회, Saga 오케스트레이션, 재고 차감 및 결제 흐름 조정 | PostgreSQL |
@@ -35,7 +35,144 @@
 
 ## 3. 구현 완료 서비스 기능 정의
 
-### 3.1 user-service
+### 3.1 api-gateway
+
+#### 역할
+
+`api-gateway`는 외부 클라이언트의 단일 진입점이다. RS256 JWT 로컬 검증, 경로 기반 라우팅(리버스 프록시), Rate Limiting, 요청/응답 구조화 로깅, 관찰성 메트릭 계측을 책임진다. 하위 서비스는 이 gateway를 통해서만 외부 트래픽을 수신하며, JWT를 직접 검증하지 않는다.
+
+#### 저장소
+
+- 없음 (stateless 서비스, DB/Redis 미사용)
+
+#### 파일 구성
+
+```text
+services/api-gateway/
+├── app/
+│   ├── main.py           # FastAPI 앱, lifespan (JWKS 워밍업), 미들웨어 등록
+│   ├── config.py         # Settings (JWKS URL, JWT 설정, Rate Limit, HTTP 타임아웃)
+│   ├── router.py         # catch-all 리버스 프록시, _get_target_url, _proxy_request
+│   └── middleware/
+│       ├── auth.py       # JWKSCache, verify_jwt, is_public_path
+│       ├── metrics.py    # OTel Counter/Histogram 메트릭 정의
+│       └── rate_limit.py # SlowAPI Limiter 설정
+├── tests/
+│   ├── conftest.py       # RS256 키쌍 동적 생성, make_jwks_response, make_access_token
+│   ├── test_health.py    # /health 인증 불필요 검증
+│   ├── test_auth.py      # JWT 검증, JWKS 캐시 히트/미스, 만료/서명불일치 케이스
+│   └── test_routing.py   # 경로별 라우팅, 쿼리 파라미터/바디 전달, 에러 전파
+├── .env.example
+├── pytest.ini
+└── requirements.txt
+```
+
+#### 미들웨어 실행 순서
+
+`add_middleware()`는 역순으로 실행되므로 아래 순서대로 등록한다.
+
+```python
+app.add_middleware(RequestLoggingMiddleware)  # ④ 가장 바깥: 요청/응답 구조화 로그
+app.add_middleware(MetricsMiddleware)         # ③ 레이턴시 측정 (인증 실패도 포함)
+app.add_middleware(AuthMiddleware)            # ② JWT 검증
+app.add_middleware(SlowAPIMiddleware)         # ① Rate Limit (가장 먼저 실행)
+```
+
+Rate Limit을 가장 먼저 실행하는 이유: 악성 트래픽이 JWT 검증 연산 자체를 유발하는 낭비를 막는다. MetricsMiddleware를 Auth 바깥에 두는 이유: 인증 실패 포함 모든 요청의 레이턴시를 측정해야 한다.
+
+#### 공개 경로 (인증 불필요)
+
+| 메서드 | 경로 | 이유 |
+| ------ | ---- | ---- |
+| ANY | `/health` | k8s liveness probe |
+| ANY | `/auth` 및 `/auth/*` | JWT가 없는 상태의 요청 (로그인·회원가입·토큰 재발급) |
+| GET | `/products` 및 `/products/*` | 비인증 상품 조회 허용 |
+
+경계 매칭 방식: `/products` 또는 `/products/`로 시작하는 경로만 허용. `/products-old` 같은 유사 경로 오라우팅 방지.
+
+#### JWKS 캐시
+
+```python
+class JWKSCache:
+    _keys: dict[str, RSAPublicKey]  # kid → 공개키
+    _fetched_at: float              # 마지막 갱신 시각
+    _refresh_lock: asyncio.Lock     # 동시 재조회 직렬화
+```
+
+- **TTL 기반 캐시**: 기본 3600초, `JWKS_CACHE_TTL_SECONDS` 환경변수로 조정
+- **캐시 히트**: TTL 유효 + kid 존재 → 네트워크 요청 없이 즉시 반환
+- **캐시 미스**: TTL 만료 또는 kid 미매칭 → user-service `/auth/jwks` 재조회
+- **thundering herd 방지**: `asyncio.Lock`으로 동시 재조회 요청 직렬화
+- **앱 시작 워밍업**: lifespan에서 `_refresh()` 선제 호출 → 첫 요청 레이턴시 스파이크 방지
+
+#### JWT 검증 흐름
+
+```
+1. Authorization 헤더 확인 → 없으면 401 (no_token)
+2. "Bearer " 접두사 확인 → 없으면 401
+3. jwt.get_unverified_header()로 kid 추출
+4. JWKSCache.get_public_key(kid) → 캐시 히트/미스 처리
+5. PyJWT로 서명 + 만료 + audience 검증
+6. 성공: MutableHeaders로 X-User-ID, X-User-Role 주입
+         (클라이언트가 헤더를 직접 심는 위조 시도를 덮어쓰기로 방어)
+7. 실패: 401 + code (EXPIRED|INVALID|JWKS_ERROR)
+```
+
+#### 라우팅 규칙
+
+| 경로 Prefix | 대상 서비스 | 환경변수 |
+| ----------- | ----------- | -------- |
+| `/auth` 또는 `/auth/*` | user-service | `USER_SERVICE_URL` |
+| `/products` 또는 `/products/*` | product-service | `PRODUCT_SERVICE_URL` |
+| `/orders` 또는 `/orders/*` | order-service | `ORDER_SERVICE_URL` |
+| 그 외 | 404 NOT_FOUND | — |
+
+- hop-by-hop 헤더(`connection`, `host`, `transfer-encoding` 등)는 프록시 시 제거
+- `multi_items()`로 중복 헤더(`Set-Cookie` 등) 보존
+- `TimeoutException` → 504 GATEWAY_TIMEOUT
+- `RequestError` → 503 SERVICE_UNAVAILABLE
+- 하위 서비스 4xx/5xx 응답은 마스킹 없이 그대로 전달
+
+#### 엔드포인트
+
+- `GET /health`
+  - 기능: 헬스체크 (k8s liveness probe용)
+  - 인증: 불필요
+  - 응답: `{ "status": "ok", "service": "api-gateway", "jwks_cached_keys": int }`
+  - `jwks_cached_keys`: 현재 캐시에 보유 중인 공개키 수 (운영 중 상태 확인용)
+
+#### 관찰성 메트릭
+
+| 메트릭 이름 | 타입 | 레이블 | 설명 |
+| ----------- | ---- | ------ | ---- |
+| `gateway_requests_total` | Counter | `method`, `path_group`, `status_code` | 전체 인바운드 요청 수 |
+| `gateway_request_duration_ms` | Histogram | `method`, `path_group` | 요청 처리 레이턴시 (ms) |
+| `gateway_auth_total` | Counter | `result` (success\|no_token\|failure) | JWT 검증 결과 |
+| `gateway_auth_failure_total` | Counter | `reason` (expired\|invalid\|jwks_error) | 인증 실패 상세 원인 |
+| `gateway_jwks_cache_total` | Counter | `result` (hit\|miss) | JWKS 캐시 히트율 |
+| `gateway_rate_limit_total` | Counter | `path_group` | Rate Limit 차단 횟수 |
+
+`path_group` 레이블은 카디널리티 폭발 방지를 위해 그루핑: `/products/12345` → `/products/{id}`.
+
+#### Rate Limiting
+
+- **라이브러리**: SlowAPI (slowapi)
+- **기준**: 클라이언트 IP (`get_remote_address`)
+- **기본값**: 분당 60 req (`RATE_LIMIT_PER_MINUTE` 환경변수로 조정)
+- **저장소**: 인메모리 (단일 인스턴스 환경). 멀티 레플리카 환경에서는 Redis 백엔드 교체 필요
+- **초과 시**: 429 응답 + `gateway_rate_limit_total` 카운터 증가
+
+#### 설계 의도
+
+- JWT를 api-gateway에서 한 번만 검증하고 하위 서비스는 헤더를 신뢰한다. 검증 로직 중복을 없애고, 하위 서비스의 관심사를 비즈니스 로직에 집중시킨다.
+- JWKS 캐시를 인메모리에 두는 이유: 매 요청마다 user-service에 검증 요청을 보내면 api-gateway가 병목이 되고, user-service가 SPOF가 된다.
+- `PyJWT + cryptography` 조합을 선택한 이유: `python-jose`는 유지보수가 사실상 중단되었고, PyJWT는 활발히 관리되는 현업 표준 라이브러리다.
+- 클라이언트의 `X-User-ID` 헤더 위조 방어: `MutableHeaders.__setitem__`으로 덮어쓰기. `append`를 쓰면 클라이언트가 위조 헤더를 먼저 심은 경우 두 개의 헤더가 공존하여 하위 서비스가 잘못된 값을 읽을 수 있다.
+- `api-gateway`에 DB를 두지 않는 이유: stateless를 유지해야 수평 확장(HPA)이 용이하다. 상태를 Redis나 DB에 두는 순간 레플리카 간 동기화 문제가 발생한다.
+
+---
+
+### 3.2 user-service
 
 #### 역할
 
@@ -102,7 +239,7 @@
 
 ---
 
-### 3.2 product-service
+### 3.3 product-service
 
 #### 역할
 
@@ -177,7 +314,7 @@
 
 ---
 
-### 3.3 payment-service
+### 3.4 payment-service
 
 #### 역할
 
@@ -262,7 +399,7 @@
 
 ---
 
-### 3.4 order-service
+### 3.5 order-service
 
 #### 역할
 
@@ -393,31 +530,7 @@ PAYMENT_REQUESTED
 
 ## 4. 예정 서비스 기능 정의
 
-### 4.1 api-gateway
-
-#### 역할
-
-- 외부 클라이언트의 단일 진입점
-- JWT 로컬 검증
-- 서비스별 라우팅
-- Rate Limiting
-- 요청/응답 로깅
-
-#### 핵심 동작
-
-1. `Authorization` 헤더에서 JWT 추출
-2. user-service가 제공한 JWKS 기반 서명 검증
-3. 성공 시 `X-User-ID`, `X-User-Role` 헤더 추가
-4. 하위 서비스로 프록시
-
-#### 비기능 요구
-
-- 하위 서비스는 JWT를 직접 검증하지 않는다.
-- 인증 실패와 권한 실패를 gateway에서 선제 차단한다.
-
----
-
-### 4.2 notification-service
+### 4.1 notification-service
 
 #### 역할
 
@@ -436,8 +549,8 @@ PAYMENT_REQUESTED
 
 ### 주문 생성 Happy Path
 
-1. Client → `api-gateway`
-2. `api-gateway` → `order-service`
+1. Client → `api-gateway` (JWT 검증, Rate Limit 체크)
+2. `api-gateway` → `order-service` (X-User-ID, X-User-Role 헤더 주입)
 3. `order-service` → `product-service` 상품 조회 (`GET /products/{id}`)
 4. `order-service` → `product-service` 재고 차감 (`POST /products/{id}/deduct-stock`, `X-Internal-Token`)
 5. `order-service` → `payment-service` 결제 요청 (`POST /payments`, `X-Internal-Token`)
@@ -451,6 +564,14 @@ PAYMENT_REQUESTED
 - 재고 부족: 지금까지 차감된 재고 롤백(`restore-stock`) 후 FAILED
 - 결제 실패 (`402 PAYMENT_REJECTED`): 재고 롤백 후 FAILED
 - 롤백 미완료: `STOCK_ROLLBACK_NEEDED` 상태로 남기고 후속 복구 배치 대상 처리
+
+### api-gateway → 하위 서비스 헤더 계약
+
+```text
+# gateway가 검증 후 주입하는 헤더 (하위 서비스가 신뢰하는 헤더)
+X-User-ID: {user_id}          # JWT sub claim 값
+X-User-Role: {role}            # JWT role claim 값 (customer|admin)
+```
 
 ### product-service 호출 규격
 
@@ -502,8 +623,7 @@ Body:
 
 ## 6. 구현 우선순위
 
-1. ⏳ `api-gateway`
-2. ⏳ `notification-service`
+1. ⏳ `notification-service`
 
 ---
 
