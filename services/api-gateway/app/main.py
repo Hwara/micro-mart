@@ -12,8 +12,8 @@ lifespan에서 JWKS 캐시를 미리 워밍업해두어
   3. SlowAPIMiddleware         → ② Rate Limit 체크
   4. AuthMiddleware            → ① JWT 검증 (가장 먼저, Rate Limit 이후)
 
-왜 Auth가 Rate Limit 이후인가:
-  Rate Limit을 먼저 차단해야 JWT 검증 연산 자체의 낭비를 막을 수 있다.
+왜 Auth가 Rate Limit 이전인가:
+  인증 실패 요청은 다운스트림/부가 미들웨어로 넘기지 않고 조기 차단한다.
   하지만 레이턴시/로깅은 인증 실패 포함 모든 요청을 측정해야 하므로 바깥에 위치.
 """
 
