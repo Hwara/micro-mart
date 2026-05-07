@@ -29,14 +29,16 @@ from .routes.orders import router as orders_router
 
 logger = structlog.get_logger(__name__)
 
+settings = get_settings()
+
+init_logging(service_name=settings.service_name, log_format=settings.log_format)
+init_telemetry(service_name=settings.service_name, db_engine=engine)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """앱 시작/종료 시 실행되는 로직."""
     settings = get_settings()
-
-    init_logging(service_name=settings.service_name, log_format=settings.log_format)
-    init_telemetry(service_name=settings.service_name, db_engine=engine)
 
     if settings.debug:
         await init_db()

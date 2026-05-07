@@ -23,6 +23,8 @@ from .routes.products import router as products_router
 
 logger = structlog.get_logger(__name__)
 settings = get_settings()
+init_logging(service_name=settings.service_name, log_format=settings.log_format)
+init_telemetry(service_name=settings.service_name, db_engine=engine)
 
 
 @asynccontextmanager
@@ -34,8 +36,7 @@ async def lifespan(app: FastAPI):
     이전에 사용하던 @app.on_event("startup")을 대체합니다.
     """
     # ── 시작 시 ──
-    init_logging(service_name=settings.service_name, log_format=settings.log_format)
-    init_telemetry(service_name=settings.service_name, db_engine=engine)
+    settings = get_settings()
 
     # DB 테이블 자동 생성 (개발용, 운영에서는 Alembic 마이그레이션 사용)
     if settings.debug:

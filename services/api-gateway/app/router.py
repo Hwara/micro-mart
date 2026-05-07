@@ -16,6 +16,7 @@ api-gateway 라우팅 및 리버스 프록시
 import httpx
 import structlog
 from fastapi import APIRouter, Request, Response
+from opentelemetry import propagate
 
 from .config import get_settings
 from .middleware.rate_limit import get_rate_limit_string, limiter
@@ -80,6 +81,12 @@ async def _proxy_request(request: Request, target_url: str) -> Response:
 
     # hop-by-hop 헤더 및 proxy 헤더 제거 (소문자 비교)
     headers = {k: v for k, v in request.headers.items() if k.lower() not in _HOP_BY_HOP_HEADERS}
+
+    # 현재 활성 Span의 traceparent/tracestate를 headers에 주입
+    # propagate.inject()는 현재 OTel Context(활성 Span)에서
+    # W3C TraceContext 헤더(traceparent, tracestate)를 꺼내 dict에 삽입합니다.
+    # 이 한 줄로 하위 서비스가 동일한 trace_id를 이어받아 Span을 생성합니다.
+    propagate.inject(headers)
 
     body = await request.body()
     url = f"{target_url}{request.url.path}"

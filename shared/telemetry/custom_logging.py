@@ -92,7 +92,8 @@ def init_logging(service_name: str, log_format: str = "pretty") -> None:
         processors=processors,
         wrapper_class=structlog.make_filtering_bound_logger(logging.DEBUG),
         context_class=dict,
-        logger_factory=structlog.PrintLoggerFactory(),
+        # stdlib logging을 통해야 OTel LoggingHandler가 OTLP로 전달할 수 있음
+        logger_factory=structlog.stdlib.LoggerFactory(),
         cache_logger_on_first_use=True,
     )
 
