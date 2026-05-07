@@ -179,8 +179,11 @@ class AuthMiddleware(BaseHTTPMiddleware):
         user_role = str(payload.get("role", "customer"))
 
         mutable_headers = MutableHeaders(scope=request.scope)
-        mutable_headers.append("x-user-id", user_id)
-        mutable_headers.append("x-user-role", user_role)
+        # append 대신 __setitem__으로 덮어쓰기:
+        # 클라이언트가 x-user-id / x-user-role을 직접 심어 보낸 경우를 방어.
+        # MutableHeaders.__setitem__은 동일 키를 모두 제거한 뒤 새 값을 단일 추가함.
+        mutable_headers["x-user-id"] = user_id
+        mutable_headers["x-user-role"] = user_role
 
         return await call_next(request)
 
