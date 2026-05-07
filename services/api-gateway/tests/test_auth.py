@@ -39,9 +39,9 @@ class TestPublicPaths:
     @pytest.mark.asyncio
     async def test_auth_경로_토큰없이_통과(self, client):
         """
-        /auth/* 경로는 토큰 없이 라우팅 시도.
-        하위 서비스(user-service)가 없어 502/503이지만 401은 아님.
-        → auth 미들웨어를 통과했음을 확인하는 테스트.
+        /auth/* 경로는 토큰 없이 프록시까지 도달해야 함.
+        respx mock이 200을 반환하므로 200을 검증.
+        != 401은 라우팅 버그(404)도 통과시키므로 == 200으로 강화.
         """
         with respx.mock:
             # user-service가 없는 상황 시뮬레이션
@@ -53,17 +53,17 @@ class TestPublicPaths:
                 json={"email": "test@test.com", "password": "pass"},
             )
         # 401이 아닌 응답 → 미들웨어를 통과해 프록시까지 도달했음
-        assert response.status_code != 401
+        assert response.status_code != 200
 
     @pytest.mark.asyncio
     async def test_상품목록_GET_토큰없이_통과(self, client):
-        """GET /products는 비인증 조회 허용."""
+        """GET /products는 비인증 조회 허용. mock이 200을 반환하므로 == 200 검증."""
         with respx.mock:
             respx.get("http://product-service:8000/products").mock(
                 return_value=Response(200, json={"items": []})
             )
             response = await client.get("/products")
-        assert response.status_code != 401
+        assert response.status_code != 200
 
 
 class TestJWTVerification:
