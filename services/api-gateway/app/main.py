@@ -9,11 +9,11 @@ lifespan에서 JWKS 캐시를 미리 워밍업해두어
   add_middleware 순서:     실제 실행 순서:
   1. RequestLoggingMiddleware  → ④ 가장 바깥 (요청 in / 응답 out 모두 기록)
   2. MetricsMiddleware         → ③ 레이턴시 측정 (로깅 안쪽)
-  3. SlowAPIMiddleware         → ② Rate Limit 체크
-  4. AuthMiddleware            → ① JWT 검증 (가장 먼저, Rate Limit 이후)
+  3. AuthMiddleware            → ② JWT 검증
+  4. SlowAPIMiddleware         → ① Rate Limit 체크 (가장 먼저)
 
-왜 Auth가 Rate Limit 이전인가:
-  인증 실패 요청은 다운스트림/부가 미들웨어로 넘기지 않고 조기 차단한다.
+왜 Auth가 Rate Limit 이후인가:
+  Rate Limit을 먼저 차단해야 JWT 검증 연산 자체의 낭비를 막을 수 있다.
   하지만 레이턴시/로깅은 인증 실패 포함 모든 요청을 측정해야 하므로 바깥에 위치.
 """
 
@@ -249,12 +249,12 @@ async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
 
 
 # 미들웨어 등록 — add_middleware의 역순으로 실행됨
-# 실행 순서: ① AuthMiddleware → ② SlowAPIMiddleware
+# 실행 순서: ① SlowAPIMiddleware → ② AuthMiddleware
 #           → ③ MetricsMiddleware → ④ RequestLoggingMiddleware
 app.add_middleware(RequestLoggingMiddleware)  # ④ 가장 바깥: 요청/응답 구조화 로그
 app.add_middleware(MetricsMiddleware)  # ③ 레이턴시 측정 (인증 실패도 포함)
-app.add_middleware(SlowAPIMiddleware)  # ② Rate Limit
-app.add_middleware(AuthMiddleware)  # ① JWT 검증 (가장 먼저 실행)
+app.add_middleware(AuthMiddleware)  # ② JWT 검증
+app.add_middleware(SlowAPIMiddleware)  # ① Rate Limit (가장 먼저 실행)
 
 
 # 구체적 경로(health)를 catch-all 라우터보다 반드시 먼저 등록
