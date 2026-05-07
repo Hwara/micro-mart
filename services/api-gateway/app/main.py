@@ -162,7 +162,6 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
             logger.warning(
                 "JWT 검증 실패",
-                error=error_msg,
                 reason=reason,
                 path=path,
                 # 토큰 원문은 절대 로그에 남기지 않음 (보안 규칙)
@@ -218,7 +217,11 @@ def _create_app() -> FastAPI:
         title="MicroMart API Gateway",
         version=s.service_version,
         lifespan=lifespan,
-        docs_url="/docs" if s.debug else None,
+        # api-gateway는 프록시 전용 서비스 — 노출할 비즈니스 스키마가 없으므로
+        # 환경 무관하게 API 문서 엔드포인트를 전면 비활성화
+        docs_url=None,
+        redoc_url=None,
+        openapi_url=None,
     )
     _app.state.limiter = limiter
     return _app
