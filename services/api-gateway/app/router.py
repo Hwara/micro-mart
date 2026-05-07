@@ -98,7 +98,8 @@ async def _proxy_request(request: Request, target_url: str) -> Response:
         # 하위 서비스 응답 타임아웃 — order-service 패턴과 동일하게 504
         logger.warning(
             "하위 서비스 타임아웃",
-            target_url=url,
+            target_url=f"{target_url}{request.url.path}",
+            has_query=bool(request.url.query),
             timeout=settings.http_timeout_seconds,
             error=str(e),
         )
@@ -111,7 +112,8 @@ async def _proxy_request(request: Request, target_url: str) -> Response:
         # 네트워크 오류, DNS 실패, 연결 거부 등 — 503
         logger.error(
             "하위 서비스 연결 실패",
-            target_url=url,
+            target_url=f"{target_url}{request.url.path}",
+            has_query=bool(request.url.query),
             error=str(e),
         )
         return Response(
@@ -128,7 +130,6 @@ async def _proxy_request(request: Request, target_url: str) -> Response:
     resp = Response(
         content=proxy_resp.content,
         status_code=proxy_resp.status_code,
-        media_type=proxy_resp.headers.get("content-type"),
     )
 
     for k, v in resp_headers:
