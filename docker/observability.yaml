@@ -1,0 +1,137 @@
+# 로컬 개발용 관찰성(Observability) 스택
+# OTel Collector → Prometheus / Loki / Tempo → Grafana
+#
+# 실행: docker compose -f docker/observability.yaml up -d
+# 종료: docker compose -f docker/observability.yaml down
+# 완전 삭제: docker compose -f docker/observability.yaml down -v
+#
+# 전제: infra.yaml이 먼저 실행되어 있어야 합니다.
+# 또는 동시에: docker compose -f docker/infra.yaml -f docker/observability.yaml up -d
+
+networks:
+  # infra.yaml의 default 네트워크와 같은 네트워크를 공유해야
+  # 서비스들이 otel-collector:4317로 접근 가능합니다.
+  default:
+    name: docker_default
+    external: true
+
+services:
+
+  # ── OpenTelemetry Collector ──────────────────────────────
+  # 모든 서비스의 텔레메트리 데이터를 단일 진입점에서 수신
+  # 서비스는 otel-collector:4317 하나만 알면 됩니다.
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.102.0
+    # contrib 버전 사용: loki exporter, prometheusremotewrite exporter 포함
+    container_name: micromart-otel-collector
+    command: ["--config=/etc/otelcol/config.yaml"]
+    volumes:
+      - ./otel-collector/config.yaml:/etc/otelcol/config.yaml:ro
+    ports:
+      - "4317:4317"    # OTLP gRPC (서비스 → Collector)
+      - "4318:4318"    # OTLP HTTP (선택적)
+      - "8888:8888"    # Collector 자체 메트릭 (Prometheus scrape용)
+    depends_on:
+      prometheus:
+        condition: service_healthy
+      loki:
+        condition: service_healthy
+      tempo:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ── Prometheus ───────────────────────────────────────────
+  # 메트릭 저장소: OTel Collector가 Remote Write로 Push
+  # scrape 설정 최소화 (Collector 자체 메트릭만 scrape)
+  prometheus:
+    image: prom/prometheus:v2.52.0
+    container_name: micromart-prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.enable-remote-write-receiver"  # Collector의 remote_write 수신 활성화
+      - "--web.enable-lifecycle"              # /-/reload API 활성화
+      - "--storage.tsdb.retention.time=7d"   # 로컬 개발용: 7일 보존
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "9090:9090"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:9090/-/healthy || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  # ── Loki ────────────────────────────────────────────────
+  # 로그 저장소: OTel Collector가 structlog JSON 로그를 Push
+  loki:
+    image: grafana/loki:3.0.0
+    container_name: micromart-loki
+    command: ["-config.file=/etc/loki/loki.yaml"]
+    volumes:
+      - ./loki/loki.yaml:/etc/loki/loki.yaml:ro
+      - loki_data:/loki
+    ports:
+      - "3100:3100"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:3100/ready || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  # ── Tempo ────────────────────────────────────────────────
+  # 분산 트레이싱 저장소: Grafana와 네이티브 연동
+  # trace_id로 로그 ↔ 트레이스 drilldown 가능
+  tempo:
+    image: grafana/tempo:2.5.0
+    container_name: micromart-tempo
+    command: ["-config.file=/etc/tempo/tempo.yaml"]
+    volumes:
+      - ./tempo/tempo.yaml:/etc/tempo/tempo.yaml:ro
+      - tempo_data:/var/tempo
+    ports:
+      - "3200:3200"    # Tempo HTTP API (Grafana datasource용)
+      - "4317"         # OTLP gRPC (컨테이너 내부 전용, 외부 노출 안 함)
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:3200/ready || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  # ── Grafana ──────────────────────────────────────────────
+  # 단일 관찰성 UI: 메트릭 + 로그 + 트레이싱을 한 화면에서 확인
+  # 로그의 trace_id 클릭 → Tempo로 바로 이동 (drilldown)
+  grafana:
+    image: grafana/grafana:11.0.0
+    container_name: micromart-grafana
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"           # 로컬 개발: 로그인 없이 접근
+      GF_AUTH_ANONYMOUS_ORG_ROLE: "Admin"
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+      GF_FEATURE_TOGGLES_ENABLE: "traceqlEditor"  # TraceQL 쿼리 에디터 활성화
+    volumes:
+      # provisioning: Grafana 시작 시 datasource/dashboard 자동 설정
+      # 매번 UI에서 수동 설정하지 않아도 됩니다
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "3000:3000"    # Grafana Web UI (http://localhost:3000)
+    depends_on:
+      - prometheus
+      - loki
+      - tempo
+    restart: unless-stopped
+
+volumes:
+  prometheus_data:
+    driver: local
+  loki_data:
+    driver: local
+  tempo_data:
+    driver: local
+  grafana_data:
+    driver: local
