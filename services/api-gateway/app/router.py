@@ -125,14 +125,16 @@ async def _proxy_request(request: Request, target_url: str) -> Response:
         (k, v) for k, v in proxy_resp.headers.multi_items() if k.lower() not in _HOP_BY_HOP_HEADERS
     ]
 
-    return Response(
+    resp = Response(
         content=proxy_resp.content,
         status_code=proxy_resp.status_code,
-        headers=dict(
-            resp_headers
-        ),  # Starlette Response는 dict도 허용하나, 중복 키는 마지막 값만 유지
         media_type=proxy_resp.headers.get("content-type"),
     )
+
+    for k, v in resp_headers:
+        resp.headers.append(k, v)
+
+    return resp
 
 
 @router.api_route(
