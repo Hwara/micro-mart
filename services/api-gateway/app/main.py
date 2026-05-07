@@ -203,14 +203,25 @@ async def lifespan(app: FastAPI):
     logger.info("api-gateway 종료")
 
 
-settings = get_settings()
+def _create_app() -> FastAPI:
+    """
+    FastAPI 앱 팩토리.
 
-app = FastAPI(
-    title="MicroMart API Gateway",
-    version=settings.service_version,
-    lifespan=lifespan,
-    docs_url="/docs" if settings.debug else None,
-)
+    모듈 레벨 get_settings() 호출을 피하기 위해 함수로 감쌈.
+    테스트 환경에서 환경변수 설정 전 임포트 시 잘못된 값이 캐싱되는 문제 방지.
+    """
+    s = get_settings()
+    _app = FastAPI(
+        title="MicroMart API Gateway",
+        version=s.service_version,
+        lifespan=lifespan,
+        docs_url="/docs" if s.debug else None,
+    )
+    _app.state.limiter = limiter
+    return _app
+
+
+app = _create_app()
 
 app.state.limiter = limiter
 
@@ -248,8 +259,8 @@ async def health_check():
     """헬스체크 — k8s liveness probe용, 인증 불필요"""
     return {
         "status": "ok",
-        "service": settings.service_name,
-        "jwks_cached_keys": len(jwks_cache._keys),
+        "service": get_settings().service_name,
+        "jwks_cached_keys": jwks_cache.key_count,
     }
 
 

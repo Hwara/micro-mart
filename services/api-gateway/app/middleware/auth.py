@@ -107,6 +107,11 @@ class JWKSCache:
 
         raise ValueError(f"공개키를 찾을 수 없습니다. kid={kid}")
 
+    @property
+    def key_count(self) -> int:
+        """외부에서 캐시 키 수를 조회할 때 사용 (내부 _keys 직접 접근 방지)."""
+        return len(self._keys)
+
 
 jwks_cache = JWKSCache()
 
