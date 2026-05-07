@@ -120,15 +120,17 @@ async def _proxy_request(request: Request, target_url: str) -> Response:
             media_type="application/json",
         )
 
-    # 응답 헤더 중 transfer-encoding은 StreamingResponse와 충돌하므로 제거
-    resp_headers = {
-        k: v for k, v in proxy_resp.headers.items() if k.lower() not in _HOP_BY_HOP_HEADERS
-    }
+    # multi_items()로 중복 헤더(Set-Cookie 등) 모두 보존
+    resp_headers: list[tuple[str, str]] = [
+        (k, v) for k, v in proxy_resp.headers.multi_items() if k.lower() not in _HOP_BY_HOP_HEADERS
+    ]
 
     return Response(
         content=proxy_resp.content,
         status_code=proxy_resp.status_code,
-        headers=resp_headers,
+        headers=dict(
+            resp_headers
+        ),  # Starlette Response는 dict도 허용하나, 중복 키는 마지막 값만 유지
         media_type=proxy_resp.headers.get("content-type"),
     )
 
