@@ -191,8 +191,8 @@ class AuthMiddleware(BaseHTTPMiddleware):
 # FastAPIInstrumentor는 instrument(app=) 호출 시점에 앱의 라우터에 훅을 심습니다.
 # lifespan 내부에서 호출하면 앱이 완성된 이후라 계측이 제대로 등록되지 않습니다.
 settings = get_settings()
-init_logging(service_name=settings.service_name, log_format=settings.log_format)
 init_telemetry(service_name=settings.service_name)
+init_logging(service_name=settings.service_name, log_format=settings.log_format)
 
 
 @asynccontextmanager

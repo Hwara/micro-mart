@@ -119,6 +119,10 @@ def init_telemetry(
     logger_provider.add_log_record_processor(BatchLogRecordProcessor(otlp_log_exporter))
     set_logger_provider(logger_provider)
 
+    # Python 기본 logging -> OTel LogRecord로 브릿지
+    # structlog에서 내보낸 로그가 trace_id와 함께 Loki로 전송됩니다.
+    logging.basicConfig(level=logging.INFO)
+
     # stdlib logging → OTel 브릿지 연결
     # LoggingInstrumentor가 Python logging.Handler를 심어서
     # logging.getLogger(...).info(...) 호출이 자동으로 OTLP로 전달됨
@@ -139,10 +143,6 @@ def init_telemetry(
     # db_engine이 없으면 건너뛰기 (api-gateway는 DB 없음)
     if db_engine is not None:
         SQLAlchemyInstrumentor().instrument(engine=db_engine.sync_engine)
-
-    # Python 기본 logging -> OTel LogRecord로 브릿지
-    # structlog에서 내보낸 로그가 trace_id와 함께 Loki로 전송됩니다.
-    logging.basicConfig(level=logging.INFO)
 
     logging.getLogger(__name__).info(
         f"[Telemetry] {service_name} OTel 초기화 완료"

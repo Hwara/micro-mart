@@ -31,8 +31,8 @@ logger = structlog.get_logger(__name__)
 
 settings = get_settings()
 
-init_logging(service_name=settings.service_name, log_format=settings.log_format)
 init_telemetry(service_name=settings.service_name, db_engine=engine)
+init_logging(service_name=settings.service_name, log_format=settings.log_format)
 
 
 @asynccontextmanager
