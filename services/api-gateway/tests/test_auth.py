@@ -53,7 +53,7 @@ class TestPublicPaths:
                 json={"email": "test@test.com", "password": "pass"},
             )
         # 401이 아닌 응답 → 미들웨어를 통과해 프록시까지 도달했음
-        assert response.status_code != 200
+        assert response.status_code == 200
 
     @pytest.mark.asyncio
     async def test_상품목록_GET_토큰없이_통과(self, client):
@@ -63,7 +63,7 @@ class TestPublicPaths:
                 return_value=Response(200, json={"items": []})
             )
             response = await client.get("/products")
-        assert response.status_code != 200
+        assert response.status_code == 200
 
 
 class TestJWTVerification:
