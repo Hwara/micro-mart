@@ -7,6 +7,7 @@ OpenTelemetry 초기화 모듈
 
 import logging
 
+from fastapi import FastAPI
 from opentelemetry import metrics, trace
 from opentelemetry._logs import set_logger_provider
 from opentelemetry.exporter.otlp.proto.grpc._log_exporter import OTLPLogExporter
@@ -54,6 +55,7 @@ def init_telemetry(
     service_name: str,
     db_engine: AsyncEngine | None = None,
     settings: TelemetrySettings | None = None,
+    app: FastAPI | None = None,
 ) -> None:
     """
     OTel TracerProvider, MeterProvider를 초기화하고
@@ -132,7 +134,7 @@ def init_telemetry(
     # 라이브러리 코드를 수정하지 않고도 Span이 자동 생성
 
     # FastAPI: 모든 HTTP 요청/응답에 자동으로 Span 생성
-    FastAPIInstrumentor().instrument(excluded_urls="health")
+    FastAPIInstrumentor().instrument_app(app)
 
     # httpx: 다른 서비스로 보내는 HTTP 요청에 자동으로 Span 생성
     # + W3C TracContext 헤더(traceparent)를 자동으로 주입

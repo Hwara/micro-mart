@@ -13,10 +13,7 @@ from .config import get_settings
 from .database import close_db, engine, init_db
 from .routes import auth as auth_router
 
-settings = get_settings()
 logger = structlog.get_logger(__name__)
-init_telemetry(service_name=settings.service_name, db_engine=engine)
-init_logging(service_name=settings.service_name, log_format=settings.log_format)
 
 
 @asynccontextmanager
@@ -43,11 +40,17 @@ async def lifespan(app: FastAPI):
     logger.info("user-service 종료 완료")
 
 
+settings = get_settings()
+
+
 app = FastAPI(
     title="MicroMart User Service",
     version=settings.service_version,
     lifespan=lifespan,
 )
+
+init_telemetry(service_name=settings.service_name, db_engine=engine, app=app)
+init_logging(service_name=settings.service_name, log_format=settings.log_format)
 
 # 미들웨어 등록 (등록 순서의 역순으로 실행됨)
 app.add_middleware(RequestLoggingMiddleware)

@@ -25,9 +25,6 @@ from .database import close_db, engine, init_db
 from .routes.payments import router as payments_router
 
 logger = structlog.get_logger(__name__)
-settings = get_settings()
-init_telemetry(service_name=settings.service_name, db_engine=engine)
-init_logging(service_name=settings.service_name, log_format=settings.log_format)
 
 
 @asynccontextmanager
@@ -52,11 +49,17 @@ async def lifespan(app: FastAPI):
     logger.info("payment-service 종료 완료")
 
 
+settings = get_settings()
+
+
 app = FastAPI(
     title="MicroMart Payment Service",
     version=settings.service_version,
     lifespan=lifespan,
 )
+
+init_telemetry(service_name=settings.service_name, db_engine=engine, app=app)
+init_logging(service_name=settings.service_name, log_format=settings.log_format)
 
 app.add_middleware(RequestLoggingMiddleware)
 app.include_router(payments_router)
