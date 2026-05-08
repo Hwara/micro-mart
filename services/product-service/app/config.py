@@ -4,6 +4,7 @@ product-service 환경변수 설정
 pydantic-settings는 클래스 필드와 동일한 이름의 환경변수를 자동으로 읽음
 예) DATABASE_URL 환경변수 -> database_url 필드에 자동 매핑
 """
+
 import os
 from functools import lru_cache
 

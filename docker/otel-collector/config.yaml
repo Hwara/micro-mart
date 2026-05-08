@@ -1,0 +1,73 @@
+# OTel Collector 파이프라인 설정
+# receivers → processors → exporters 순으로 데이터가 흐릅니다.
+
+receivers:
+  # OTLP: 서비스들이 gRPC(4317)로 메트릭/트레이스/로그를 밀어넣는 수신기
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  # batch: Span/메트릭을 모아서 한 번에 전송 → 네트워크 효율 향상
+  batch:
+    timeout: 5s
+    send_batch_size: 512
+
+  # memory_limiter: Collector OOM 방지
+  # 급작스러운 트래픽 스파이크 시 데이터를 드랍해서라도 프로세스 보호
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 256
+
+exporters:
+  # 트레이싱 → Tempo (OTLP로 직접 전달)
+  otlp/tempo:
+    endpoint: tempo:4317
+    tls:
+      insecure: true
+
+  # 메트릭 → Prometheus (Remote Write Push 방식)
+  # Prometheus가 서비스를 scrape하는 대신,
+  # Collector가 Prometheus로 push → 서비스마다 scrape 설정 불필요
+  prometheusremotewrite:
+    endpoint: http://prometheus:9090/api/v1/write
+    tls:
+      insecure_skip_verify: true
+
+  # 로그 → Loki
+  loki:
+    endpoint: http://loki:3100/loki/api/v1/push
+    default_labels_enabled:
+      exporter: false
+      job: true
+    # service.name을 Loki 레이블로 승격 → 서비스별 로그 필터링 가능
+    # labels:
+    #   resource:
+    #     service.name: "service_name"
+
+  # 개발용: Collector 자체 콘솔 출력 (디버깅)
+  debug:
+    verbosity: basic
+
+service:
+  pipelines:
+    # 트레이스 파이프라인
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlp/tempo, debug]
+
+    # 메트릭 파이프라인
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [prometheusremotewrite, debug]
+
+    # 로그 파이프라인
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [loki, debug]

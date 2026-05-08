@@ -11,3 +11,6 @@ opentelemetry-instrumentation-sqlalchemy>=0.45b0
 opentelemetry-instrumentation-httpx>=0.45b0
 structlog>=24.1.0
 prometheus-client>=0.20.0
+PyJWT>=2.8.0
+cryptography>=42.0.0
+slowapi>=0.1.9

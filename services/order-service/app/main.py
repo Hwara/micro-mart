@@ -35,9 +35,6 @@ async def lifespan(app: FastAPI):
     """앱 시작/종료 시 실행되는 로직."""
     settings = get_settings()
 
-    init_logging(service_name=settings.service_name, log_format=settings.log_format)
-    init_telemetry(service_name=settings.service_name, db_engine=engine)
-
     if settings.debug:
         await init_db()
 
@@ -78,6 +75,9 @@ app = FastAPI(
     version=settings.service_version,
     lifespan=lifespan,
 )
+
+init_telemetry(service_name=settings.service_name, db_engine=engine, app=app)
+init_logging(service_name=settings.service_name, log_format=settings.log_format)
 
 app.add_middleware(RequestLoggingMiddleware)
 app.include_router(orders_router)

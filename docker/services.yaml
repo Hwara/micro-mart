@@ -1,0 +1,147 @@
+# 로컬 통합 테스트용 서비스 docker-compose
+#
+# 전제: infra.yaml과 observability.yaml이 먼저 실행되어 있어야 합니다.
+#
+# [전체 통합 실행]
+# docker compose \
+#   -f docker/infra.yaml \
+#   -f docker/observability.yaml \
+#   -f docker/services.yaml \
+#   up -d --build
+#
+# [빌드 컨텍스트 주의]
+# 모든 서비스는 레포지토리 루트(.)를 context로 사용합니다.
+# shared/telemetry를 COPY하려면 루트 컨텍스트가 반드시 필요합니다.
+
+networks:
+  # infra.yaml, observability.yaml과 동일한 네트워크 공유
+  default:
+    name: docker_default
+    external: true
+
+services:
+
+  # ── user-service ────────────────────────────────────────
+  user-service:
+    build:
+      context: ..                              # 레포 루트 기준
+      dockerfile: services/user-service/Dockerfile
+    container_name: micromart-user-service
+    env_file:
+      - ../services/user-service/.env
+    volumes:
+      # JWT 키 마운트: secrets는 .gitignore에 포함, 로컬에서 직접 생성
+      # /scripts 의 key 생성 스크립트로 키를 먼저 생성한 후 run 할 것
+      - ../keys/private.pem:/run/secrets/private.pem:ro
+      - ../keys/public.pem:/run/secrets/public.pem:ro
+    ports:
+      - "8001:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      otel-collector:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:8000/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s   # 앱 기동 시간 여유 (DB init_db 포함)
+    restart: unless-stopped
+
+  # ── product-service ─────────────────────────────────────
+  product-service:
+    build:
+      context: ..
+      dockerfile: services/product-service/Dockerfile
+    container_name: micromart-product-service
+    env_file:
+      - ../services/product-service/.env
+    ports:
+      - "8002:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      otel-collector:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:8000/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    restart: unless-stopped
+
+  # ── order-service ────────────────────────────────────────
+  order-service:
+    build:
+      context: ..
+      dockerfile: services/order-service/Dockerfile
+    container_name: micromart-order-service
+    env_file:
+      - ../services/order-service/.env
+    ports:
+      - "8003:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+      otel-collector:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:8000/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+
+  # ── payment-service ──────────────────────────────────────
+  payment-service:
+    build:
+      context: ..
+      dockerfile: services/payment-service/Dockerfile
+    container_name: micromart-payment-service
+    env_file:
+      - ../services/payment-service/.env
+    ports:
+      - "8004:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      otel-collector:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:8000/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    restart: unless-stopped
+
+  # ── api-gateway ──────────────────────────────────────────
+  # 외부 단일 진입점: 8080으로 노출
+  api-gateway:
+    build:
+      context: ..
+      dockerfile: services/api-gateway/Dockerfile
+    container_name: micromart-api-gateway
+    env_file:
+      - ../services/api-gateway/.env
+    ports:
+      - "8080:8000"    # 외부 단일 진입점
+    depends_on:
+      otel-collector:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:8000/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
