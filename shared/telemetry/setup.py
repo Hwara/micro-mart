@@ -125,6 +125,11 @@ def init_telemetry(
     # structlog에서 내보낸 로그가 trace_id와 함께 Loki로 전송됩니다.
     logging.basicConfig(level=logging.INFO)
 
+    # httpx 에서는 warning 레벨 이상만 로깅
+    # -> INFO 등의 로그는 middleware를 통해 로그를 남기는 중이므로 노이즈를 줄임
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
+
     # stdlib logging → OTel 브릿지 연결
     # LoggingInstrumentor가 Python logging.Handler를 심어서
     # logging.getLogger(...).info(...) 호출이 자동으로 OTLP로 전달됨
@@ -134,7 +139,8 @@ def init_telemetry(
     # 라이브러리 코드를 수정하지 않고도 Span이 자동 생성
 
     # FastAPI: 모든 HTTP 요청/응답에 자동으로 Span 생성
-    FastAPIInstrumentor().instrument_app(app)
+    if app is not None:
+        FastAPIInstrumentor().instrument_app(app)
 
     # httpx: 다른 서비스로 보내는 HTTP 요청에 자동으로 Span 생성
     # + W3C TracContext 헤더(traceparent)를 자동으로 주입

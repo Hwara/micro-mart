@@ -31,6 +31,7 @@ services:
       - ../services/user-service/.env
     volumes:
       # JWT 키 마운트: secrets는 .gitignore에 포함, 로컬에서 직접 생성
+      # /scripts 의 key 생성 스크립트로 키를 먼저 생성한 후 run 할 것
       - ../keys/private.pem:/run/secrets/private.pem:ro
       - ../keys/public.pem:/run/secrets/public.pem:ro
     ports:

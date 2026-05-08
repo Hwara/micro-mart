@@ -105,6 +105,7 @@ services:
   # ── Grafana ──────────────────────────────────────────────
   # 단일 관찰성 UI: 메트릭 + 로그 + 트레이싱을 한 화면에서 확인
   # 로그의 trace_id 클릭 → Tempo로 바로 이동 (drilldown)
+  # 로컬 전용 익명 인증이 활성화 되있으므로 운영 환경에서는 반드시 수정하여 사용
   grafana:
     image: grafana/grafana:11.0.0
     container_name: micromart-grafana
