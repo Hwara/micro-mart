@@ -94,6 +94,8 @@ async def create_payment_service(
             detail=_error("이미 처리된 주문의 결제 요청입니다.", "DUPLICATE_PAYMENT"),
         )
 
+    process_start = datetime.now(UTC)
+
     if settings.chaos_latency_ms > 0:
         log.debug("Chaos 지연 적용", latency_ms=settings.chaos_latency_ms)
         await asyncio.sleep(settings.chaos_latency_ms / 1000)
@@ -123,8 +125,6 @@ async def create_payment_service(
     is_chaos_failure = (
         settings.chaos_failure_rate > 0 and random.random() < settings.chaos_failure_rate
     )
-
-    process_start = datetime.now(UTC)
 
     if settings.chaos_db_slowquery:
         await asyncio.sleep(random.uniform(1.0, 3.0))
