@@ -26,7 +26,10 @@ if __name__ == "__main__":
         print("\n=== OTel 초기화 테스트 ===")
         # 실제 Collector가 없어도 초기화는 성공합니다
         # (Exporter가 연결 실패해도 앱은 정상 동작하도록 설계됨)
-        settings = TelemetrySettings(otel_exporter_otlp_endpoint="http://localhost:4317")
+        settings = TelemetrySettings(
+            otel_enabled=False,
+            otel_exporter_otlp_endpoint="http://localhost:4317",
+        )
         init_telemetry(service_name="test-service", settings=settings)
         print("✅ OTel 초기화 성공")
 

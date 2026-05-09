@@ -103,11 +103,13 @@ def setup_env():
     original_jwks = os.environ.get("JWKS_URL")
     original_algo = os.environ.get("JWT_ALGORITHM")
     original_audience = os.environ.get("JWT_AUDIENCE")
+    original_otel_enabled = os.environ.get("OTEL_ENABLED")
 
     get_settings.cache_clear()
     os.environ["JWKS_URL"] = "http://user-service:8000/auth/jwks"
     os.environ["JWT_ALGORITHM"] = "RS256"
     os.environ["JWT_AUDIENCE"] = ""  # audience 검증 생략
+    os.environ["OTEL_ENABLED"] = "false"
 
     # JWKS 캐시 초기화 — 이전 테스트의 공개키가 남아있으면 검증 결과가 오염됨
     jwks_cache._keys = {}
@@ -124,6 +126,7 @@ def setup_env():
         ("JWKS_URL", original_jwks),
         ("JWT_ALGORITHM", original_algo),
         ("JWT_AUDIENCE", original_audience),
+        ("OTEL_ENABLED", original_otel_enabled),
     ]:
         if original is None:
             os.environ.pop(key, None)

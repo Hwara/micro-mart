@@ -19,14 +19,24 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../.
 import pytest
 import pytest_asyncio
 from app.config import get_settings
-from app.database import get_db
-from app.main import app
-from app.models import Base
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 INTERNAL_TOKEN = "test-internal-token"
 TEST_USER_ID = 42
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
+
+# config.py no longer reads .env files directly, so import-time settings users
+# must see test values before app.database/app.main create module-level objects.
+os.environ.setdefault("INTERNAL_SERVICE_TOKEN", INTERNAL_TOKEN)
+os.environ.setdefault("PRODUCT_SERVICE_URL", "http://mock-product")
+os.environ.setdefault("PAYMENT_SERVICE_URL", "http://mock-payment")
+os.environ.setdefault("NATS_URL", "nats://mock-nats:4222")
+os.environ.setdefault("DATABASE_URL", TEST_DATABASE_URL)
+os.environ.setdefault("OTEL_ENABLED", "false")
+
+from app.database import get_db
+from app.main import app
+from app.models import Base
 
 
 @pytest.fixture(autouse=True)
@@ -41,6 +51,7 @@ def setup_env(monkeypatch):
     monkeypatch.setenv("PAYMENT_SERVICE_URL", "http://mock-payment")
     monkeypatch.setenv("NATS_URL", "nats://mock-nats:4222")
     monkeypatch.setenv("DATABASE_URL", TEST_DATABASE_URL)
+    monkeypatch.setenv("OTEL_ENABLED", "false")
     yield
     get_settings.cache_clear()
 

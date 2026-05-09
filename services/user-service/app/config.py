@@ -5,24 +5,22 @@ pydantic-settings는 클래스 필드와 동일한 이름의 환경변수를 자
 예) DATABASE_URL 환경변수 -> database_url 필드에 자동 매핑
 """
 
-import os
 from functools import lru_cache
 
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# 현재 파일(config.py)의 위치를 기준으로 절대 경로 계산
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-env_path = os.path.join(BASE_DIR, ".env")
-
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=env_path, extra="ignore", env_file_encoding="utf-8")
+    model_config = SettingsConfigDict(extra="ignore")
 
     # 서비스 기본 설정
     service_name: str = "user-service"
     service_version: str = "0.1.0"
     debug: bool = False
+    log_format: str = "json"
+    otel_exporter_otlp_endpoint: str = "http://localhost:4317"
+    otel_exporter_otlp_insecure: bool = False
 
     # 데이터베이스
     database_url: str = "postgresql+asyncpg://micromart:micromart@localhost:5432/userdb"
@@ -42,11 +40,6 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "RS256"
     access_token_expire_minutes: int = 15
     refresh_token_expire_days: int = 7
-
-    # OTel — 반드시 otel_exporter_otlp_endpoint 이름 사용 (축약형 금지)
-    otel_exporter_otlp_endpoint: str = "http://localhost:4317"
-    # log_format 기본값은 json (pretty는 로컬 개발 시 .env로 오버라이드)
-    log_format: str = "json"
 
     @model_validator(mode="after")
     def load_jwt_keys(self) -> "Settings":

@@ -105,7 +105,10 @@ services/<service-name>/
 
 - 모든 설정은 `pydantic-settings` 기반 `Settings` 클래스로 관리한다.
 - 환경변수 이름은 대문자 스네이크 케이스를 사용한다.
-- `.env.example`에는 실제 필요한 값만 명시한다.
+- 애플리케이션 코드는 `.env` 파일을 직접 읽지 않고 **프로세스 환경변수만** 읽는다.
+  Docker Compose의 `env_file`, Kubernetes ConfigMap/Secret, 로컬 실행 스크립트가 `.env`를
+  환경변수로 주입하는 책임을 가진다.
+- `.env.example`에는 실제 필요한 값만 명시하고, Docker 로컬 통합 실행 기준 예시값을 둔다.
 - 운영/개발 환경에서 바뀔 수 있는 값은 하드코딩하지 않는다.
 - 보안 민감값(`JWT_PRIVATE_KEY`, `INTERNAL_SERVICE_TOKEN`, DB 비밀번호)은 코드에 직접 넣지 않는다.
 - `Settings()` 인스턴스는 모듈 레벨에서 생성하지 않는다.
@@ -126,11 +129,7 @@ class Settings(BaseSettings):
     database_url: str
     internal_service_token: str
 
-    model_config = SettingsConfigDict(
-        env_file=".env",
-        env_file_encoding="utf-8",
-        extra="ignore",
-    )
+    model_config = SettingsConfigDict(extra="ignore")
 
 
 @lru_cache
@@ -140,6 +139,17 @@ def get_settings() -> Settings:
 
 > ⚠️ `settings = Settings()` 처럼 모듈 임포트 시점에 인스턴스를 생성하지 않는다.
 > 테스트 환경에서 환경변수가 설정되기 전에 모듈이 임포트되면 잘못된 값이 캐싱될 수 있다.
+
+### 서비스별 환경변수 목록
+
+| 서비스 | 환경변수 |
+| ------ | -------- |
+| `api-gateway` | `SERVICE_NAME`, `SERVICE_VERSION`, `DEBUG`, `LOG_FORMAT`, `USER_SERVICE_URL`, `PRODUCT_SERVICE_URL`, `ORDER_SERVICE_URL`, `JWKS_URL`, `JWT_ALGORITHM`, `JWT_AUDIENCE`, `JWKS_CACHE_TTL_SECONDS`, `HTTP_TIMEOUT_SECONDS`, `RATE_LIMIT_PER_MINUTE`, `OTEL_ENABLED`, `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_INSECURE` |
+| `user-service` | `SERVICE_NAME`, `SERVICE_VERSION`, `DEBUG`, `LOG_FORMAT`, `DATABASE_URL`, `REDIS_URL`, `JWT_PRIVATE_KEY_FILE`, `JWT_PUBLIC_KEY_FILE`, `JWT_PRIVATE_KEY`, `JWT_PUBLIC_KEY`, `JWT_ALGORITHM`, `ACCESS_TOKEN_EXPIRE_MINUTES`, `REFRESH_TOKEN_EXPIRE_DAYS`, `OTEL_ENABLED`, `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_INSECURE` |
+| `product-service` | `SERVICE_NAME`, `SERVICE_VERSION`, `DEBUG`, `LOG_FORMAT`, `DATABASE_URL`, `REDIS_URL`, `REDIS_SOCKET_CONNECT_TIMEOUT`, `REDIS_SOCKET_TIMEOUT`, `INTERNAL_SERVICE_TOKEN`, `PRODUCT_CACHE_TTL`, `DEFAULT_PAGE_SIZE`, `MAX_PAGE_SIZE`, `OTEL_ENABLED`, `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_INSECURE` |
+| `order-service` | `SERVICE_NAME`, `SERVICE_VERSION`, `DEBUG`, `LOG_FORMAT`, `DATABASE_URL`, `INTERNAL_SERVICE_TOKEN`, `PRODUCT_SERVICE_URL`, `PAYMENT_SERVICE_URL`, `MAX_OPTIMISTIC_RETRY`, `HTTP_TIMEOUT_SECONDS`, `NATS_URL`, `NATS_CONNECT_TIMEOUT_SECONDS`, `OTEL_ENABLED`, `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_INSECURE` |
+| `payment-service` | `SERVICE_NAME`, `SERVICE_VERSION`, `DEBUG`, `LOG_FORMAT`, `DATABASE_URL`, `INTERNAL_SERVICE_TOKEN`, `CHAOS_FAILURE_RATE`, `CHAOS_LATENCY_MS`, `CHAOS_DB_SLOWQUERY`, `OTEL_ENABLED`, `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_INSECURE` |
+| `shared/telemetry` | `OTEL_ENABLED`, `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_INSECURE`, `LOG_FORMAT`, `SERVICE_VERSION` |
 
 ---
 

@@ -7,20 +7,20 @@ JWKS_CACHE_TTL: 공개키 캐시 유효 시간 (초). 기본 1시간.
   학습 환경에서는 3600초(1시간)가 적절.
 """
 
-import os
 from functools import lru_cache
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-env_path = os.path.join(BASE_DIR, ".env")
-
 
 class Settings(BaseSettings):
+    model_config = SettingsConfigDict(extra="ignore")
+
     service_name: str = "api-gateway"
     service_version: str = "0.1.0"
     debug: bool = False
     log_format: str = "json"
+    otel_exporter_otlp_endpoint: str = "http://localhost:4317"
+    otel_exporter_otlp_insecure: bool = False
 
     # 하위 서비스 URL — docker-compose 네트워크 내 서비스명으로 설정
     user_service_url: str = "http://user-service:8000"
@@ -43,14 +43,6 @@ class Settings(BaseSettings):
 
     # Rate Limiting — 클라이언트 IP 기준, 분당 최대 요청 수
     rate_limit_per_minute: int = 60
-
-    otel_exporter_otlp_endpoint: str = "http://localhost:4317"
-
-    model_config = SettingsConfigDict(
-        env_file=env_path,
-        env_file_encoding="utf-8",
-        extra="ignore",
-    )
 
 
 @lru_cache

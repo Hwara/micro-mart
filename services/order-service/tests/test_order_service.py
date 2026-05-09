@@ -225,7 +225,7 @@ class TestCreateOrderStockFailure:
         order = result.scalar_one_or_none()
         assert order is not None
         assert order.status == OrderStatus.FAILED
-        assert order.saga_status == SagaStatus.FAILED
+        assert order.saga_status == SagaStatus.STOCK_ROLLED_BACK
         assert order.failure_reason == "INSUFFICIENT_STOCK"
 
     @pytest.mark.asyncio
