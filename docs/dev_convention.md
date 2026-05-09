@@ -111,8 +111,10 @@ services/<service-name>/
 - `.env.example`에는 실제 필요한 값만 명시하고, Docker 로컬 통합 실행 기준 예시값을 둔다.
 - 운영/개발 환경에서 바뀔 수 있는 값은 하드코딩하지 않는다.
 - 보안 민감값(`JWT_PRIVATE_KEY`, `INTERNAL_SERVICE_TOKEN`, DB 비밀번호)은 코드에 직접 넣지 않는다.
-- `Settings()` 인스턴스는 모듈 레벨에서 생성하지 않는다.
-  `get_settings()`를 `@lru_cache`로 감싸고, 필요한 시점(함수/메서드 내부)에서 호출한다.
+- `Settings()` 인스턴스는 가능하면 요청 처리 시점 또는 앱 초기화 시점에 생성한다.
+  단, `database.py`의 SQLAlchemy engine/session factory 처럼 애플리케이션 시작 시 반드시 필요한 singleton 리소스는 예외적으로 import 시점에 생성할 수 있다.
+  이 경우 필요한 환경변수(`DATABASE_URL` 등)는 반드시 프로세스 시작 전에 주입되어 있어야 한다.
+- `get_settings()`를 `@lru_cache`로 감싸고, 필요한 시점(함수/메서드 내부)에서 호출한다.
   `lru_cache` 덕분에 반복 호출 비용이 없으며, 테스트 시 `get_settings.cache_clear()`로
   환경변수 변경을 즉시 반영할 수 있다. FastAPI 공식 문서도 이 패턴을 권장한다.
 
@@ -137,9 +139,6 @@ def get_settings() -> Settings:
     return Settings()
 ```
 
-> ⚠️ `settings = Settings()` 처럼 모듈 임포트 시점에 인스턴스를 생성하지 않는다.
-> 테스트 환경에서 환경변수가 설정되기 전에 모듈이 임포트되면 잘못된 값이 캐싱될 수 있다.
-
 ### 서비스별 환경변수 목록
 
 | 서비스 | 환경변수 |
@@ -159,9 +158,6 @@ def get_settings() -> Settings:
 - 세션 의존성은 `AsyncSession` 기반 generator로 제공한다.
 - `expire_on_commit=False`를 기본값으로 사용한다.
 - 공통 타입 별칭 `DBSession`을 사용해 라우터 시그니처를 단순화한다.
-- `engine`과 `async_session_factory`는 `get_settings()`를 함수 내부에서 호출해 생성한다.
-  모듈 레벨에서 `settings = get_settings()`를 호출하면 테스트 환경에서
-  잘못된 DB URL로 엔진이 생성될 수 있다.
 - Redis는 **사용하는 서비스만** 정의한다. Redis가 필요 없는 서비스는 `config.py`와
   `database.py`에 Redis 설정을 추가하지 않는다.
 
@@ -179,7 +175,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from .config import get_settings
 
-settings = get_settings()  # lru_cache로 감싸져 있어 반복 호출 비용 없음
+settings = get_settings()
 
 engine = create_async_engine(
     settings.database_url,
@@ -218,6 +214,20 @@ DBSession = Annotated[AsyncSession, Depends(get_db)]
 > ⚠️ `engine`은 모듈 임포트 시 생성되므로, 테스트에서 DB URL을 바꾸려면
 > `get_db`를 통째로 `dependency_overrides`로 교체하는 방식을 사용한다.
 > DB URL 자체를 바꿔야 하는 테스트는 별도 엔진을 생성해 오버라이드한다.
+
+### 테스트 환경 주의사항
+
+`database.py`는 import 시점에 SQLAlchemy engine을 생성할 수 있다.
+따라서 pytest에서는 `app.database` 또는 `app.main` import 전에
+필수 환경변수(`DATABASE_URL`, `INTERNAL_SERVICE_TOKEN` 등)를 먼저 주입해야 한다.
+
+권장 패턴:
+
+```python
+os.environ.setdefault("DATABASE_URL", TEST_DATABASE_URL)
+
+from app.main import app
+```
 
 ---
 
