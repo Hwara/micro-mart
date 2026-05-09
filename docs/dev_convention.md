@@ -77,7 +77,7 @@ services/<service-name>/
 비즈니스 로직이 복잡하거나 외부 서비스 호출이 많은 서비스는 아래와 같이 모듈을 분리한다.
 
 | 서비스 | 추가 파일 | 역할 |
-|--------|-----------|------|
+| -------- | ----------- | ------ |
 | `order-service` | `nats_client.py` | NATS 싱글턴 커넥션 관리 (`main.py` 순환 import 방지) |
 | `order-service` | `services/http_clients.py` | product/payment 서비스 HTTP 클라이언트 (timeout, 에러 래핑) |
 | `order-service` | `services/order_service.py` | Saga 오케스트레이션 비즈니스 로직 |
@@ -86,7 +86,7 @@ services/<service-name>/
 ### 파일 역할
 
 | 파일 | 역할 |
-|------|------|
+| ------ | ------ |
 | `main.py` | FastAPI 앱 생성, startup/shutdown, 라우터 등록 |
 | `config.py` | 환경변수 설정, `BaseSettings` 기반 설정 로딩 |
 | `database.py` | SQLAlchemy async engine, sessionmaker, DB 의존성 |
@@ -101,7 +101,23 @@ services/<service-name>/
 
 ---
 
-## 6. `config.py` 규칙
+## 6. 의존성 관리 규칙
+
+- Python 패키지 버전 고정은 루트 `requirements/constraints.txt`를 기준으로 한다.
+- 서비스별 `requirements.txt`는 직접 버전을 고정하지 않고, 가능하면 아래 공통 파일을 참조한다.
+  - `requirements/service-common.txt`: FastAPI, SQLAlchemy, httpx, OpenTelemetry, structlog 등 서비스 공통 런타임 의존성
+  - `requirements/test-common.txt`: pytest, pytest-asyncio, httpx, aiosqlite 등 테스트 공통 의존성
+- 서비스 고유 의존성만 각 서비스의 `requirements.txt`에 추가한다.
+  - 예: user-service의 `redis`, `passlib`, `python-jose`
+  - 예: product-service의 `redis`
+  - 예: order-service의 `nats-py`
+- 새 의존성을 추가할 때는 먼저 `constraints.txt`에 버전을 고정한 뒤, 필요한 common 또는 서비스별 requirements에 이름만 추가한다.
+- Dockerfile에서는 레포 루트의 `requirements/` 디렉터리를 먼저 복사한 뒤 서비스별 requirements를 설치한다.
+- 버전 업그레이드가 발생하면 `docs/micromart_design.md`의 기술 스택 표와 관련 References 문서를 함께 갱신한다.
+
+---
+
+## 7. `config.py` 규칙
 
 - 모든 설정은 `pydantic-settings` 기반 `Settings` 클래스로 관리한다.
 - 환경변수 이름은 대문자 스네이크 케이스를 사용한다.
@@ -152,7 +168,7 @@ def get_settings() -> Settings:
 
 ---
 
-## 7. `database.py` 규칙
+## 8. `database.py` 규칙
 
 - SQLAlchemy 2.0 async 스타일을 사용한다.
 - 세션 의존성은 `AsyncSession` 기반 generator로 제공한다.
@@ -231,7 +247,7 @@ from app.main import app
 
 ---
 
-## 8. `models.py` 규칙
+## 9. `models.py` 규칙
 
 - SQLAlchemy 2.0의 `Mapped[...]` + `mapped_column()` 스타일을 사용한다.
 - PK는 특별한 사유가 없으면 `BigInteger` + `autoincrement=True`를 사용한다.
@@ -277,7 +293,7 @@ class User(Base):
 
 ---
 
-## 9. 상태값 규칙
+## 10. 상태값 규칙
 
 - 주문, Saga, 결제, 환불 상태값은 문자열 하드코딩 대신 Python `str + enum.Enum`을 사용한다.
 - 허용 상태값은 반드시 `ERD_structure.md` 기준으로 정의한다.
@@ -298,7 +314,7 @@ class PaymentStatus(str, enum.Enum):
 
 ---
 
-## 10. `schemas.py` 규칙
+## 11. `schemas.py` 규칙
 
 - 요청/응답 스키마는 Pydantic 모델로 분리한다.
 - ORM 모델을 그대로 응답으로 노출하지 않는다.
@@ -327,7 +343,7 @@ class PaymentResponse(BaseModel):
 
 ---
 
-## 11. 라우터 규칙
+## 12. 라우터 규칙
 
 - 라우터는 얇게 유지하고, 비즈니스 로직은 `services/` 또는 별도 함수로 분리한다.
 - 엔드포인트 함수 내부에서 긴 트랜잭션 로직을 직접 작성하지 않는다.
@@ -350,7 +366,7 @@ async def create_payment(payload: PaymentCreateRequest, db: DBSession):
 
 ---
 
-## 12. 서비스 간 호출 규칙
+## 13. 서비스 간 호출 규칙
 
 - 서비스 간 HTTP 호출은 반드시 명시적 timeout을 설정한다.
 - 내부 서비스 호출은 공통적으로 `X-Internal-Token` 헤더를 사용한다.
@@ -375,7 +391,7 @@ headers = {
 
 ---
 
-## 13. API 경계 규칙
+## 14. API 경계 규칙
 
 - 외부 클라이언트용 API와 내부 서비스용 API를 구분한다.
 - 내부 서비스 전용 API는 인증 헤더 없이는 접근할 수 없어야 한다.
@@ -386,7 +402,7 @@ headers = {
 
 ---
 
-## 14. 비즈니스 로직 규칙
+## 15. 비즈니스 로직 규칙
 
 - 결제, 주문, 재고 차감처럼 실패 가능성이 높은 로직은 단계별 상태를 남긴다.
 - 보상 트랜잭션이 필요한 로직은 중간 상태를 DB에 저장해 복구 가능하게 만든다.
@@ -396,7 +412,7 @@ headers = {
 
 ---
 
-## 15. 로깅 / 관찰성 규칙
+## 16. 로깅 / 관찰성 규칙
 
 - 모든 서비스는 `shared/telemetry` 공통 모듈을 우선 사용한다.
 - 로그는 구조화된 JSON 형식을 사용한다.
@@ -407,7 +423,7 @@ headers = {
 
 ---
 
-## 16. 보안 규칙
+## 17. 보안 규칙
 
 - `INTERNAL_SERVICE_TOKEN` 기본값은 개발용으로만 사용하고 운영에서는 반드시 변경한다.
 - private key, DB password, secret token은 절대 코드에 하드코딩하지 않는다.
@@ -417,7 +433,7 @@ headers = {
 
 ---
 
-## 17. 테스트 / 검증 규칙
+## 18. 테스트 / 검증 규칙
 
 - 최소한의 정상 흐름과 실패 흐름을 직접 검증한다.
 - 모델 변경 시 생성/조회/상태 변경이 의도대로 되는지 확인한다.
@@ -426,7 +442,7 @@ headers = {
 
 ---
 
-## 18. 문서 동기화 규칙
+## 19. 문서 동기화 규칙
 
 다음 변경이 발생하면 관련 문서를 함께 갱신한다.
 
@@ -439,7 +455,7 @@ headers = {
 
 ---
 
-## 19. 커밋 / 작업 규칙
+## 20. 커밋 / 작업 규칙
 
 - 자동 커밋하지 않는다.
 - 의미 없는 대규모 리팩터링을 한 번에 진행하지 않는다.
@@ -448,7 +464,7 @@ headers = {
 
 ---
 
-## 20. 체크리스트
+## 21. 체크리스트
 
 새 서비스 또는 새 기능 구현 전 아래 항목을 확인한다.
 

@@ -15,9 +15,10 @@ LGTM(Loki, Grafana, Tempo, Prometheus) 관찰성 스택을 깊이 학습하기 �
 
 | 항목 | 선택 | 이유 |
 | ------ | ------ | ------ |
-| 언어 / 프레임워크 | Python 3.12 + FastAPI 0.115.x | 코드량 최소화, OpenTelemetry SDK 성숙도 높음 |
+| 언어 / 프레임워크 | Python 3.12 + FastAPI 0.136.1 | 코드량 최소화, OpenTelemetry SDK 성숙도 높음 |
+| 데이터 검증 / 설정 | Pydantic 2.13.4 + pydantic-settings 2.14.0 | 요청/응답 검증, 환경변수 타입 검증 |
+| ASGI 기반 | Starlette 0.52.1 | FastAPI 기반 ASGI 런타임 |
 | ORM | SQLAlchemy 2.0 async | 비동기 DB 세션, Mapped 타입 안전성 |
-| 설정 관리 | pydantic-settings 2.x | 환경변수 타입 검증, `.env` 파일 자동 로딩 |
 | 로깅 | structlog 24.x | JSON 구조화 로그, traceId/spanId 자동 주입 |
 | 데이터베이스 | PostgreSQL (서비스별 독립) | MSA 원칙 준수, 서비스 간 DB 공유 금지 |
 | 캐시 | Redis (redis.asyncio 5.x) | Refresh Token 저장, product-service Cache-Aside |
@@ -89,7 +90,7 @@ flowchart LR
   - `middleware/rate_limit.py` — SlowAPI Limiter 설정
 - **미들웨어 실행 순서** (add_middleware 역순 실행):
 
-  ```
+  ```text
   ① SlowAPIMiddleware    — Rate Limit 체크 (가장 먼저)
   ② AuthMiddleware       — JWT 검증, X-User-ID/Role 헤더 주입
   ③ MetricsMiddleware    — 레이턴시 측정 (인증 실패 포함 모든 요청)
