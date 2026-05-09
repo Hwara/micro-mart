@@ -9,11 +9,6 @@ api-gateway 테스트 공통 픽스처
 """
 
 import os
-import sys
-
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../..")))
-
 import time
 
 import pytest
