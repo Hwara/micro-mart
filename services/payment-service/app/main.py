@@ -5,14 +5,6 @@ product-service 패턴과 동일한 구조 유지.
 Redis가 없으므로 close_db는 engine.dispose만 호출.
 """
 
-import os
-import sys
-
-BASE_DIR = os.path.dirname(
-    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-)
-sys.path.append(BASE_DIR)
-
 from contextlib import asynccontextmanager
 
 import structlog

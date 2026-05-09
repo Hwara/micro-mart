@@ -17,15 +17,7 @@ lifespan에서 JWKS 캐시를 미리 워밍업해두어
   하지만 레이턴시/로깅은 인증 실패 포함 모든 요청을 측정해야 하므로 바깥에 위치.
 """
 
-import os
-import sys
 import time
-
-BASE_DIR = os.path.dirname(
-    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-)
-sys.path.append(BASE_DIR)
-
 from contextlib import asynccontextmanager
 
 import structlog

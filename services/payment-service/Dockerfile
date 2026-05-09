@@ -26,6 +26,7 @@ WORKDIR /app
 
 COPY --from=builder /app/venv /app/venv
 ENV PATH="/app/venv/bin:$PATH"
+ENV PYTHONPATH=/app
 
 COPY shared/ /app/shared/
 COPY services/payment-service/app /app/app

@@ -35,6 +35,7 @@ WORKDIR /app
 # builder에서 설치 완료된 venv만 복사 (소스 불포함)
 COPY --from=builder /app/venv /app/venv
 ENV PATH="/app/venv/bin:$PATH"
+ENV PYTHONPATH=/app
 
 # shared 패키지 소스 복사 (editable install이 참조)
 COPY shared/ /app/shared/
