@@ -135,16 +135,16 @@ async def test_레이어5_의존성_오버라이드():
 
     try:
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-            # 인증 없이 → 401이지만 override는 호출됨
+            # 인증을 통과시킨 뒤 DB override 호출 여부만 검증한다.
             response = await client.post(
                 "/payments",
                 json={"order_id": 1, "user_id": 10, "amount": 100},
+                headers={"X-Internal-Token": "test-token"},
             )
             print(f"\n응답 코드: {response.status_code}")
             print(f"override_called: {override_called}")
-            # 401이어도 괜찮음 — 우리가 확인하려는 건 오버라이드 호출 여부
             assert override_called is True
-            assert response.status_code in (401, 201)
+            assert response.status_code == 201
     finally:
         app.dependency_overrides.clear()
         await engine.dispose()

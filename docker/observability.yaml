@@ -21,7 +21,7 @@ services:
   # 모든 서비스의 텔레메트리 데이터를 단일 진입점에서 수신
   # 서비스는 otel-collector:4317 하나만 알면 됩니다.
   otel-collector:
-    image: otel/opentelemetry-collector-contrib:0.102.0
+    image: otel/opentelemetry-collector-contrib:0.150.1
     # contrib 버전 사용: loki exporter, prometheusremotewrite exporter 포함
     container_name: micromart-otel-collector
     command: ["--config=/etc/otelcol/config.yaml"]
@@ -44,7 +44,7 @@ services:
   # 메트릭 저장소: OTel Collector가 Remote Write로 Push
   # scrape 설정 최소화 (Collector 자체 메트릭만 scrape)
   prometheus:
-    image: prom/prometheus:v2.52.0
+    image: prom/prometheus:v3.11.3
     container_name: micromart-prometheus
     command:
       - "--config.file=/etc/prometheus/prometheus.yml"
@@ -67,7 +67,7 @@ services:
   # ── Loki ────────────────────────────────────────────────
   # 로그 저장소: OTel Collector가 structlog JSON 로그를 Push
   loki:
-    image: grafana/loki:3.0.0
+    image: grafana/loki:3.7.1
     container_name: micromart-loki
     command: ["-config.file=/etc/loki/loki.yaml"]
     volumes:
@@ -86,7 +86,7 @@ services:
   # 분산 트레이싱 저장소: Grafana와 네이티브 연동
   # trace_id로 로그 ↔ 트레이스 drilldown 가능
   tempo:
-    image: grafana/tempo:2.5.0
+    image: grafana/tempo:2.9.0
     container_name: micromart-tempo
     command: ["-config.file=/etc/tempo/tempo.yaml"]
     volumes:
@@ -107,7 +107,7 @@ services:
   # 로그의 trace_id 클릭 → Tempo로 바로 이동 (drilldown)
   # 로컬 전용 익명 인증이 활성화 되있으므로 운영 환경에서는 반드시 수정하여 사용
   grafana:
-    image: grafana/grafana:11.0.0
+    image: grafana/grafana:13.0.1
     container_name: micromart-grafana
     environment:
       GF_AUTH_ANONYMOUS_ENABLED: "true"           # 로컬 개발: 로그인 없이 접근

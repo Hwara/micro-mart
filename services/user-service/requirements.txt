@@ -1,30 +1,19 @@
-# 공통 의존성
-fastapi>=0.111.0
-uvicorn[standard]>=0.29.0
-pydantic-settings>=2.2.0
+-c ../../requirements/constraints.txt
+-r ../../requirements/service-common.txt
+
 pydantic[email]
-sqlalchemy[asyncio]>=2.0.0
-asyncpg>=0.29.0
-httpx>=0.27.0
-opentelemetry-sdk>=1.24.0
-opentelemetry-exporter-otlp-proto-grpc>=1.24.0
-opentelemetry-instrumentation-fastapi>=0.45b0
-opentelemetry-instrumentation-sqlalchemy>=0.45b0
-opentelemetry-instrumentation-httpx>=0.45b0
-structlog>=24.1.0
-prometheus-client>=0.20.0
 
 # JWT (RS256)
-python-jose[cryptography]>=3.3.0
+python-jose[cryptography]
 
 # 비밀번호 해싱
-passlib[bcrypt]>=1.7.4
+passlib[bcrypt]
 
 # 4.1.x 이상 버전에서는 버그 발생을 확인하여 다운그레이드
 bcrypt==4.0.1
 
-# Redis (Refresh Token 저장)
-redis[asyncio]>=5.0.0
+# Redis (Refresh Token 저장, redis.asyncio는 redis 기본 패키지에 포함)
+redis
 
 # DB 마이그레이션
-alembic>=1.13.0
+alembic

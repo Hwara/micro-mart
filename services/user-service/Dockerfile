@@ -1,6 +1,6 @@
 # ── Stage 1: builder ──────────────────────────────────────
 # 의존성 설치만 수행. 이 레이어는 requirements.txt가 변경될 때만 재빌드됩니다.
-FROM python:3.12-slim AS builder
+FROM python:3.12-slim-trixie AS builder
 
 WORKDIR /build
 
@@ -14,16 +14,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN python -m venv /app/venv
 ENV PATH="/app/venv/bin:$PATH"
 
+# 공통 버전 constraints를 먼저 복사해 모든 설치가 같은 버전 기준을 사용하게 합니다.
+COPY requirements/ /build/requirements/
+
 # shared/telemetry를 먼저 설치 (서비스 requirements보다 먼저 캐시)
-COPY shared/telemetry/requirements.txt /build/shared-requirements.txt
-RUN pip install --no-cache-dir -r /build/shared-requirements.txt
+COPY shared/telemetry/requirements.txt /build/shared/telemetry/requirements.txt
+RUN pip install --no-cache-dir -r /build/shared/telemetry/requirements.txt
 
 # 서비스 의존성 설치
-COPY services/user-service/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+COPY services/user-service/requirements.txt /build/services/user-service/requirements.txt
+RUN pip install --no-cache-dir -r /build/services/user-service/requirements.txt
 
 # ── Stage 2: runtime ──────────────────────────────────────
-FROM python:3.12-slim AS runtime
+FROM python:3.12-slim-trixie AS runtime
 
 # 런타임에 필요한 최소 시스템 라이브러리만 포함
 RUN apt-get update && apt-get install -y --no-install-recommends \
