@@ -15,8 +15,8 @@ from shared.telemetry.middleware import RequestLoggingMiddleware
 from shared.telemetry.setup import TelemetrySettings, init_telemetry
 
 __all__ = [
-    "init_telemetry",
     "init_logging",
-    "TelemetrySettings",
     "RequestLoggingMiddleware",
+    "TelemetrySettings",
+    "init_telemetry",
 ]

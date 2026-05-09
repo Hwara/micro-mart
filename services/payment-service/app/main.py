@@ -51,7 +51,6 @@ async def lifespan(app: FastAPI):
 
 settings = get_settings()
 
-
 app = FastAPI(
     title="MicroMart Payment Service",
     version=settings.service_version,

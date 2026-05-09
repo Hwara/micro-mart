@@ -1,5 +1,3 @@
-import hmac
-
 import structlog
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from opentelemetry import metrics
@@ -12,6 +10,7 @@ from ..cache import (
 )
 from ..config import get_settings
 from ..database import DBSession, redis_client
+from ..dependencies import require_admin, verify_internal_service
 from ..models import Product
 from ..schemas import (
     ErrorResponse,
@@ -57,45 +56,6 @@ stock_conflict_counter = meter.create_counter(
     "product_stock_conflict_total",
     description="낙관적 잠금 충돌로 인한 차감 실패 수",
 )
-
-
-# ─── 의존성: 권한 체크 ───────────────────────────────────────────
-def require_admin(x_user_role: str = Header(default="")) -> None:
-    """
-    api-gateway가 주입한 X-User-Role 헤더 검증.
-
-    주의: product-service는 JWT를 직접 검증하지 않는다.
-    api-gateway가 이미 검증한 헤더를 신뢰하는 설계 (내부망 통신 전제).
-    외부 직접 접근 시 api-gateway 없이 헤더를 위조할 수 있으므로
-    운영에서는 서비스 메시(mTLS) 또는 네트워크 정책으로 보호 필수.
-    """
-    if x_user_role != "admin":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="관리자 권한이 필요합니다.",
-        )
-
-
-def verify_internal_service(
-    x_internal_token: str = Header(default=""),
-) -> None:
-    """
-    내부 서비스 전용 엔드포인트 보호 (order-service → product-service).
-
-    운영 보안 레벨:
-    1단계 (현재): 공유 시크릿 헤더 검증
-    2단계 (미래): mTLS + Service Mesh 정책으로 대체
-    """
-    if not settings.internal_service_token:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="내부 서비스 토큰이 설정되지 않았습니다.",
-        )
-    if not hmac.compare_digest(x_internal_token, settings.internal_service_token):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="내부 서비스 인증에 실패했습니다.",
-        )
 
 
 # ─── 엔드포인트 ──────────────────────────────────────────────────
