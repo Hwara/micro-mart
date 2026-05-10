@@ -28,6 +28,11 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
     """
 
     async def dispatch(self, request: Request, call_next) -> Response:
+        NOISY_PATHS = {"/health"}
+
+        if request.url.path in NOISY_PATHS:
+            return await call_next(request)
+
         start_time = time.perf_counter()
 
         # 요청 로그
