@@ -7,6 +7,7 @@ pydantic-settings는 클래스 필드와 동일한 이름의 환경변수를 자
 
 from functools import lru_cache
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -35,6 +36,19 @@ class Settings(BaseSettings):
 
     # 내부 서비스 토큰
     internal_service_token: str
+
+    @field_validator("internal_service_token")
+    @classmethod
+    def validate_internal_service_token(cls, value: str) -> str:
+        """
+        Fail fast when INTERNAL_SERVICE_TOKEN is empty.
+
+        verify_internal_service still checks the runtime header value, but the
+        service should not start with an unusable shared secret.
+        """
+        if not value.strip():
+            raise ValueError("INTERNAL_SERVICE_TOKEN must not be empty")
+        return value
 
     # 페이지네이션 기본값
     default_page_size: int = 20

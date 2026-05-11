@@ -150,9 +150,8 @@ async def refresh_service(body: RefreshRequest, db: AsyncSession) -> TokenRespon
     if not user or not user.is_active:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
 
-    await auth_utils.revoke_refresh_token(redis_client, user_id, token_device)
     new_access_token = auth_utils.create_access_token(user)
-    new_refresh_token = await auth_utils.create_refresh_token(redis_client, user_id, token_device)
+    new_refresh_token = await auth_utils.rotate_refresh_token(redis_client, user_id, token_device)
 
     token_refresh_total.add(1)
     logger.info("토큰 재발급 완료", user_id=user.id)

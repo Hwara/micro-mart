@@ -26,12 +26,30 @@ if __name__ == "__main__":
         print("\n=== OTel 초기화 테스트 ===")
         # 실제 Collector가 없어도 초기화는 성공합니다
         # (Exporter가 연결 실패해도 앱은 정상 동작하도록 설계됨)
+        from opentelemetry import trace
+
+        settings = TelemetrySettings(
+            otel_enabled=True,
+            otel_exporter_otlp_endpoint="http://localhost:4317",
+        )
+        init_telemetry(service_name="test-service", settings=settings)
+        tracer = trace.get_tracer("test")
+        with tracer.start_as_current_span("otel-enabled-span") as span:
+            assert span.get_span_context().is_valid
+        print("✅ OTel 초기화 성공")
+
+    def _test_telemetry_disabled():
+        print("\n=== OTel 비활성화 경로 테스트 ===")
+        from opentelemetry import trace
+
+        provider_before = trace.get_tracer_provider()
         settings = TelemetrySettings(
             otel_enabled=False,
             otel_exporter_otlp_endpoint="http://localhost:4317",
         )
-        init_telemetry(service_name="test-service", settings=settings)
-        print("✅ OTel 초기화 성공")
+        init_telemetry(service_name="test-service-disabled", settings=settings)
+        assert trace.get_tracer_provider() is provider_before
+        print("✅ OTel 비활성화 경로 확인")
 
     def _test_trace_id_injection():
         print("\n=== trace_id 주입 테스트 ===")
@@ -42,8 +60,10 @@ if __name__ == "__main__":
         logger = structlog.get_logger()
 
         with tracer.start_as_current_span("test-span"):
+            assert trace.get_current_span().get_span_context().is_valid
             logger.info("Span 내부 로그 (trace_id가 포함되어야 함)")
 
+        assert not trace.get_current_span().get_span_context().is_valid
         logger.info("Span 외부 로그 (trace_id가 없어야 함)")
         print("✅ trace_id 주입 테스트 완료 (위 로그에서 trace_id 확인)")
 
@@ -51,4 +71,5 @@ if __name__ == "__main__":
         _test_logging()
         _test_telemetry()
         _test_trace_id_injection()
+        _test_telemetry_disabled()
         print("\n🎉 모든 테스트 통과!")
