@@ -15,16 +15,18 @@ LGTM(Loki, Grafana, Tempo, Prometheus) 관찰성 스택을 깊이 학습하기 �
 
 | 항목 | 선택 | 이유 |
 | ------ | ------ | ------ |
-| 언어 / 프레임워크 | Python 3.12 + FastAPI 0.115.x | 코드량 최소화, OpenTelemetry SDK 성숙도 높음 |
+| 언어 / 프레임워크 | Python 3.12 + FastAPI 0.136.1 | 코드량 최소화, OpenTelemetry SDK 성숙도 높음 |
+| 데이터 검증 / 설정 | Pydantic 2.13.4 + pydantic-settings 2.14.0 | 요청/응답 검증, 환경변수 타입 검증 |
+| ASGI 기반 | Starlette 0.52.1 | FastAPI 기반 ASGI 런타임 |
 | ORM | SQLAlchemy 2.0 async | 비동기 DB 세션, Mapped 타입 안전성 |
-| 설정 관리 | pydantic-settings 2.x | 환경변수 타입 검증, `.env` 파일 자동 로딩 |
-| 로깅 | structlog 24.x | JSON 구조화 로그, traceId/spanId 자동 주입 |
-| 데이터베이스 | PostgreSQL (서비스별 독립) | MSA 원칙 준수, 서비스 간 DB 공유 금지 |
-| 캐시 | Redis (redis.asyncio 5.x) | Refresh Token 저장, product-service Cache-Aside |
+| 로깅 | structlog 25.5.0 | JSON 구조화 로그, traceId/spanId 자동 주입 |
+| 데이터베이스 | PostgreSQL 16 (서비스별 DB 분리) | MSA 원칙 준수, 서비스 간 DB 공유 금지 |
+| 캐시 | Redis 7.4.x (redis.asyncio) | Refresh Token 저장, product-service Cache-Aside |
 | 메시지 큐 | NATS | 경량, Kubernetes 네이티브, 비동기 트레이스 전파 실습 |
 | HTTP 클라이언트 | httpx | 비동기, OTel 자동 계측, 서비스 간 호출 및 리버스 프록시 |
 | Rate Limiting | SlowAPI | IP 기반, FastAPI 통합 용이, 인메모리 저장소 |
 | JWT 검증 | PyJWT + cryptography | RS256 공개키 검증, python-jose 대비 유지보수 활성화 |
+| 관찰성 SDK | OpenTelemetry 1.41.1 / instrumentation 0.62b1 | OTLP trace/metric/log 수집, FastAPI/SQLAlchemy/httpx 자동 계측 |
 | 컨테이너 | Docker | 서비스별 독립 Dockerfile |
 | 오케스트레이션 | Kubernetes | 관찰성 스택 Helm 배포 환경 |
 | 부하 생성 | k6 | 시나리오 스크립트, Grafana 연동 |
@@ -83,23 +85,30 @@ flowchart LR
 - **파일 구성**:
   - `main.py` — FastAPI 앱, lifespan(JWKS 워밍업), 미들웨어 등록 순서 관리
   - `config.py` — JWKS URL, JWT 설정, Rate Limit, HTTP 타임아웃 등
-  - `router.py` — catch-all 리버스 프록시, 경로 prefix 기반 라우팅
+  - `router.py` — catch-all HTTP 경계, Rate Limit, 미등록 경로 404
+  - `services/proxy_service.py` — 경로 prefix 기반 라우팅, hop-by-hop 헤더 제거, TraceContext 전파, httpx 예외 매핑
   - `middleware/auth.py` — JWKSCache 클래스, verify_jwt, is_public_path
   - `middleware/metrics.py` — OTel Counter/Histogram 메트릭 정의
   - `middleware/rate_limit.py` — SlowAPI Limiter 설정
 - **미들웨어 실행 순서** (add_middleware 역순 실행):
 
-  ```
+  ```text
   ① SlowAPIMiddleware    — Rate Limit 체크 (가장 먼저)
   ② AuthMiddleware       — JWT 검증, X-User-ID/Role 헤더 주입
   ③ MetricsMiddleware    — 레이턴시 측정 (인증 실패 포함 모든 요청)
   ④ RequestLoggingMiddleware — 요청/응답 구조화 로그 (가장 바깥)
   ```
 
-- **공개 경로(인증 불필요)**:
+- **공개 경로(익명 접근 허용)**:
   - `(ANY) /health` — k8s liveness probe
   - `(ANY) /auth/*` — 로그인·회원가입·토큰 재발급
   - `(GET) /products` 및 `GET /products/*` — 비인증 상품 조회
+- **public optional auth**:
+  - 모든 요청에서 클라이언트가 보낸 `X-User-ID`, `X-User-Role`은 먼저 제거한다.
+  - `GET /products` 계열은 Bearer 토큰이 없으면 익명으로 통과한다.
+  - `GET /products` 계열에 Bearer 토큰이 있으면 검증하고, 성공 시에만 사용자 헤더를 주입한다.
+  - 상품 조회의 Bearer 토큰 검증 실패는 익명 요청으로 낮추지 않고 `401`로 반환한다.
+  - `/auth`는 토큰 재발급·로그아웃 흐름을 user-service가 판단해야 하므로 gateway JWT 검증을 건너뛴다.
 - **JWKS 캐시 설계**:
   - 최초 요청 또는 TTL 만료 시 user-service `/auth/jwks` 조회
   - 기본 TTL: 3600초 (환경변수 `JWKS_CACHE_TTL_SECONDS`로 조정)
@@ -139,6 +148,7 @@ flowchart LR
   - `POST /auth/refresh` — Access Token 재발급 (Refresh Token Rotation)
   - `POST /auth/logout` — 로그아웃 (기기별 Refresh Token 삭제)
   - `GET  /auth/jwks` — RS256 공개키 반환 (api-gateway 캐싱용)
+- **구조**: 라우터는 `routes/auth.py`, 비즈니스 로직은 `services/auth_service.py`, 요청/응답 스키마는 `schemas.py`로 분리
 
 #### product-service (포트 8002)
 
@@ -154,6 +164,7 @@ flowchart LR
   - `DELETE /products/{id}` — 소프트 삭제 (admin 전용)
   - `POST /products/{id}/deduct-stock` — 재고 차감 (내부 서비스 전용, `X-Internal-Token` 인증)
   - `POST /products/{id}/restore-stock` — 재고 복구 보상 트랜잭션 (내부 서비스 전용, `X-Internal-Token` 인증)
+- **구조**: `routes/products.py`는 HTTP 경계만 담당하고, Cache-Aside·권한 분기·재고 로직은 `services/product_service.py`에 둔다.
 
 #### order-service (포트 8003) ⭐ 핵심 서비스
 
@@ -193,6 +204,7 @@ flowchart LR
   - `GET  /payments/{id}` — 결제 상태 조회 (내부 전용)
   - `POST /payments/{id}/refunds` — 환불 요청 (부분 환불 지원, 내부 전용)
 - **헬스체크**: `GET /health` — Chaos Mode 설정 상태 포함 응답
+- **구조**: `routes/payments.py`는 `X-Internal-Token` 보호와 응답 모델만 담당하고, 상태 전이·Chaos Mode·메트릭은 `services/payment_service.py`에 둔다.
 
 **Chaos Mode 환경변수:**
 
@@ -213,14 +225,15 @@ CHAOS_DB_SLOWQUERY=true # DB 슬로우쿼리 시뮬레이션
 ## 3. 핵심 데이터 플로우 — 주문 생성
 
 ```text
-Client → api-gateway POST /api/orders (JWT 포함)
+Client → api-gateway POST /orders (JWT 포함)
 api-gateway → (JWT 검증, Rate Limit 체크)
 api-gateway → order-service X-User-ID 헤더 + traceId 전파
 order-service → product-service 상품 정보 조회 (GET /products/{id})
+order-service → order-db 주문/주문항목 생성 (PENDING / STARTED)
 order-service → product-service 재고 차감 (POST /products/{id}/deduct-stock, X-Internal-Token)
 order-service → payment-service 결제 요청 (POST /payments, X-Internal-Token)
 payment-service → order-service 결제 승인/거절 응답
-order-service → 실패 시 재고 롤백 (POST /products/{id}/restore-stock), 성공 시 order-db 주문 저장
+order-service → 실패 시 재고 롤백 (POST /products/{id}/restore-stock), 성공 시 주문 상태 COMPLETED 커밋
 order-service → NATS order.completed 이벤트 발행 (best-effort)
 NATS → notification-service 이벤트 소비, 알림 발송 시뮬레이션
 ```
@@ -278,14 +291,17 @@ user:{id}:token_version → 버전 번호
 ### api-gateway JWT 검증 흐름
 
 ```text
-1. Authorization 헤더에서 Bearer 토큰 추출
-2. jwt.get_unverified_header()로 kid 추출 (네트워크 요청 없음)
-3. JWKSCache.get_public_key(kid)
+1. 요청 진입 시 X-User-ID, X-User-Role 제거
+2. `/auth`, `/health` 공개 경로 → gateway JWT 검증 없이 통과
+3. `GET /products` + Bearer 토큰 없음 → 익명 요청으로 통과
+4. 보호 경로 + Bearer 토큰 없음 → 401 반환
+5. 검증 대상 경로에 Bearer 토큰이 있으면 jwt.get_unverified_header()로 kid 추출 (네트워크 요청 없음)
+6. JWKSCache.get_public_key(kid)
    ├─ 캐시 유효 + kid 존재 → 즉시 반환 (캐시 히트)
    └─ 캐시 만료 또는 kid 없음 → user-service /auth/jwks 재조회 (캐시 미스)
-4. PyJWT로 서명 + 만료 검증
-5. 성공: X-User-ID, X-User-Role 헤더 주입 후 하위 서비스로 전달
-6. 실패: 401 반환 (reason: expired|invalid|jwks_error)
+7. PyJWT로 서명 + 만료 검증
+8. 성공: X-User-ID, X-User-Role 헤더 주입 후 하위 서비스로 전달
+9. 실패: 401 반환 (reason: expired|invalid|jwks_error)
 ```
 
 ---
@@ -320,8 +336,8 @@ user:{id}:token_version → 버전 번호
 
 ```python
 # 트레이싱: OTLP → OTel Collector → Tempo
-# 메트릭: Prometheus Exporter (HTTP 자동 + 커스텀 비즈니스 메트릭)
-# 로깅: structlog JSON 포맷 (traceId/spanId 자동 주입 → Loki)
+# 메트릭: OTLP → OTel Collector → Prometheus Remote Write
+# 로깅: structlog JSON → OTel LogRecord → OTel Collector → Loki
 ```
 
 ### Loki 로그 필드
@@ -370,12 +386,15 @@ micro-mart/
 │   │   │   ├── __init__.py
 │   │   │   ├── main.py           # FastAPI 앱, lifespan, 미들웨어 등록 순서
 │   │   │   ├── config.py         # JWKS URL, JWT 설정, Rate Limit, HTTP 타임아웃
-│   │   │   ├── router.py         # catch-all 리버스 프록시, 경로 prefix 라우팅
-│   │   │   └── middleware/
+│   │   │   ├── router.py         # catch-all HTTP 경계, Rate Limit
+│   │   │   ├── middleware/
+│   │   │   │   ├── __init__.py
+│   │   │   │   ├── auth.py       # JWKSCache, verify_jwt, is_public_path
+│   │   │   │   ├── metrics.py    # OTel 메트릭 정의 (Counter/Histogram)
+│   │   │   │   └── rate_limit.py # SlowAPI Limiter
+│   │   │   └── services/
 │   │   │       ├── __init__.py
-│   │   │       ├── auth.py       # JWKSCache, verify_jwt, is_public_path
-│   │   │       ├── metrics.py    # OTel 메트릭 정의 (Counter/Histogram)
-│   │   │       └── rate_limit.py # SlowAPI Limiter
+│   │   │       └── proxy_service.py
 │   │   ├── tests/
 │   │   │   ├── __init__.py
 │   │   │   ├── conftest.py       # RS256 키쌍 생성, JWKS mock 헬퍼
@@ -393,8 +412,10 @@ micro-mart/
 │   │   │   ├── models.py
 │   │   │   ├── schemas.py
 │   │   │   ├── auth.py
-│   │   │   └── routes/
-│   │   │       └── auth.py
+│   │   │   ├── routes/
+│   │   │   │   └── auth.py
+│   │   │   └── services/
+│   │   │       └── auth_service.py
 │   │   ├── Dockerfile
 │   │   ├── .env.example
 │   │   └── requirements.txt
@@ -403,11 +424,14 @@ micro-mart/
 │   │   │   ├── main.py
 │   │   │   ├── config.py
 │   │   │   ├── database.py
+│   │   │   ├── dependencies.py
 │   │   │   ├── models.py
 │   │   │   ├── schemas.py
 │   │   │   ├── cache.py
-│   │   │   └── routes/
-│   │   │       └── products.py
+│   │   │   ├── routes/
+│   │   │   │   └── products.py
+│   │   │   └── services/
+│   │   │       └── product_service.py
 │   │   ├── Dockerfile
 │   │   ├── .env.example
 │   │   └── requirements.txt
@@ -420,8 +444,10 @@ micro-mart/
 │   │   │   ├── models.py
 │   │   │   ├── schemas.py
 │   │   │   ├── dependencies.py
-│   │   │   └── routes/
-│   │   │       └── payments.py
+│   │   │   ├── routes/
+│   │   │   │   └── payments.py
+│   │   │   └── services/
+│   │   │       └── payment_service.py
 │   │   ├── tests/
 │   │   │   ├── conftest.py
 │   │   │   └── test_payments.py
@@ -443,7 +469,7 @@ micro-mart/
 │   │   │   └── services/
 │   │   │       ├── http_clients.py
 │   │   │       └── order_service.py
-│   │   ├── test/
+│   │   ├── tests/
 │   │   ├── .env.example
 │   │   ├── pytest.ini
 │   │   └── requirements.txt
@@ -453,6 +479,7 @@ micro-mart/
 │   └── telemetry/
 │       ├── __init__.py
 │       ├── setup.py
+│       ├── config.py
 │       ├── middleware.py
 │       ├── custom_logging.py
 │       ├── test_telemetry.py
@@ -463,16 +490,29 @@ micro-mart/
 │   ├── init-scripts/
 │   │   └── init-db.sql
 │   ├── infra.yaml
+│   ├── observability.yaml
+│   ├── services.yaml
 │   └── .env.example
 ├── docs/
 │   ├── dev_convention.md
 │   ├── service_function_definition.md
 │   ├── micromart_design.md
 │   ├── ERD_structure.md
+│   ├── postman/
+│   │   └── micromart_postman_collection.json
 │   └── references/
 │       ├── init-develop-environment.md
-│       └── shared-telemetry-reference.md
+│       ├── shared-telemetry-reference.md
+│       ├── user-service.md
+│       ├── product-service.md
+│       ├── phase4_payment_service_references.md
+│       ├── payment-service.md
+│       └── order-service-reference.md
 ├── pyproject.toml
+├── requirements/
+│   ├── constraints.txt
+│   ├── service-common.txt
+│   └── test-common.txt
 ├── .pre-commit-config.yaml
 └── README.md
 ```
@@ -487,10 +527,10 @@ micro-mart/
 4. ✅ **payment-service** — 결제 시뮬레이션, Chaos Mode, 부분 환불 구현
 5. ✅ **order-service** — 오케스트레이터, Saga 패턴, 서비스 간 호출, NATS 이벤트 발행
 6. ✅ **api-gateway** — JWT 검증 미들웨어(JWKS 캐시), 리버스 프록시, Rate Limiting, 관찰성 메트릭
-7. ⏳ **notification-service** — NATS 소비, 비동기 처리
-8. ⏳ **Kubernetes 매니페스트** — Deployment, Service, ConfigMap, Secret
-9. ⏳ **k6 부하 스크립트** — 시나리오별 부하 생성
-10. ⏳ **docker-compose.yaml** — 로컬 통합 테스트 환경
+7. ✅ **로컬 통합 Compose** — infra/observability/services 분리 구성
+8. ⏳ **notification-service** — NATS 소비, 비동기 처리 (현재 Dockerfile/requirements scaffold)
+9. ⏳ **Kubernetes 매니페스트** — Deployment, Service, ConfigMap, Secret
+10. ⏳ **k6 부하 스크립트** — 시나리오별 부하 생성
 
 ---
 

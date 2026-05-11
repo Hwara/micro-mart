@@ -44,10 +44,11 @@ services:
       otel-collector:
         condition: service_started
     healthcheck:
-      test: ["CMD-SHELL", "wget -q --spider http://localhost:8000/health || exit 1"]
-      interval: 10s
+      # Python stdlib keeps healthchecks working without adding wget/curl to runtime images.
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=3).read()\" || exit 1"]
+      interval: 30s
       timeout: 5s
-      retries: 5
+      retries: 3
       start_period: 15s   # 앱 기동 시간 여유 (DB init_db 포함)
     restart: unless-stopped
 
@@ -69,10 +70,10 @@ services:
       otel-collector:
         condition: service_started
     healthcheck:
-      test: ["CMD-SHELL", "wget -q --spider http://localhost:8000/health || exit 1"]
-      interval: 10s
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=3).read()\" || exit 1"]
+      interval: 30s
       timeout: 5s
-      retries: 5
+      retries: 3
       start_period: 15s
     restart: unless-stopped
 
@@ -94,10 +95,10 @@ services:
       otel-collector:
         condition: service_started
     healthcheck:
-      test: ["CMD-SHELL", "wget -q --spider http://localhost:8000/health || exit 1"]
-      interval: 10s
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=3).read()\" || exit 1"]
+      interval: 30s
       timeout: 5s
-      retries: 5
+      retries: 3
       start_period: 20s
     restart: unless-stopped
 
@@ -117,10 +118,10 @@ services:
       otel-collector:
         condition: service_started
     healthcheck:
-      test: ["CMD-SHELL", "wget -q --spider http://localhost:8000/health || exit 1"]
-      interval: 10s
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=3).read()\" || exit 1"]
+      interval: 30s
       timeout: 5s
-      retries: 5
+      retries: 3
       start_period: 15s
     restart: unless-stopped
 
@@ -139,9 +140,9 @@ services:
       otel-collector:
         condition: service_started
     healthcheck:
-      test: ["CMD-SHELL", "wget -q --spider http://localhost:8000/health || exit 1"]
-      interval: 10s
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=3).read()\" || exit 1"]
+      interval: 30s
       timeout: 5s
-      retries: 5
+      retries: 3
       start_period: 20s
     restart: unless-stopped

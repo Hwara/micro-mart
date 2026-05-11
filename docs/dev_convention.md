@@ -1,6 +1,6 @@
 # MicroMart — AI 개발 컨벤션 가이드
 
-> 최종 갱신일: 2026-05-05
+> 최종 갱신일: 2026-05-11
 > 목적: MicroMart 프로젝트에서 AI/개발자가 일관된 구조와 규칙으로 코드를 작성하도록 하는 기준 문서
 
 ---
@@ -69,6 +69,8 @@ services/<service-name>/
 │   └── middleware/
 ├── Dockerfile
 ├── .env.example
+├── pytest.ini    # 테스트가 있는 서비스
+├── tests/        # 테스트가 있는 서비스
 └── requirements.txt
 ```
 
@@ -77,16 +79,20 @@ services/<service-name>/
 비즈니스 로직이 복잡하거나 외부 서비스 호출이 많은 서비스는 아래와 같이 모듈을 분리한다.
 
 | 서비스 | 추가 파일 | 역할 |
-|--------|-----------|------|
+| -------- | ----------- | ------ |
 | `order-service` | `nats_client.py` | NATS 싱글턴 커넥션 관리 (`main.py` 순환 import 방지) |
 | `order-service` | `services/http_clients.py` | product/payment 서비스 HTTP 클라이언트 (timeout, 에러 래핑) |
 | `order-service` | `services/order_service.py` | Saga 오케스트레이션 비즈니스 로직 |
 | `product-service` | `cache.py` | Redis Cache-Aside 헬퍼 |
+| `product-service` | `services/product_service.py` | 상품 CRUD, Cache-Aside, 재고 차감/복구 비즈니스 로직 |
+| `payment-service` | `services/payment_service.py` | 결제/환불 상태 전이, Chaos Mode, 메트릭 계측 |
+| `user-service` | `services/auth_service.py` | 회원가입, 로그인, 토큰 재발급/로그아웃, JWKS 생성 |
+| `api-gateway` | `services/proxy_service.py` | 라우팅 대상 결정, 프록시 요청, TraceContext 전파 |
 
 ### 파일 역할
 
 | 파일 | 역할 |
-|------|------|
+| ------ | ------ |
 | `main.py` | FastAPI 앱 생성, startup/shutdown, 라우터 등록 |
 | `config.py` | 환경변수 설정, `BaseSettings` 기반 설정 로딩 |
 | `database.py` | SQLAlchemy async engine, sessionmaker, DB 의존성 |
@@ -101,15 +107,36 @@ services/<service-name>/
 
 ---
 
-## 6. `config.py` 규칙
+## 6. 의존성 관리 규칙
+
+- Python 패키지 버전 고정은 루트 `requirements/constraints.txt`를 기준으로 한다.
+- 서비스별 `requirements.txt`는 직접 버전을 고정하지 않고, 가능하면 아래 공통 파일을 참조한다.
+  - `requirements/service-common.txt`: FastAPI, SQLAlchemy, httpx, OpenTelemetry, structlog 등 서비스 공통 런타임 의존성
+  - `requirements/test-common.txt`: pytest, pytest-asyncio, httpx, aiosqlite 등 테스트 공통 의존성
+- 서비스 고유 의존성만 각 서비스의 `requirements.txt`에 추가한다.
+  - 예: user-service의 `redis`, `passlib`, `python-jose`
+  - 예: product-service의 `redis`
+  - 예: order-service의 `nats-py`
+- 새 의존성을 추가할 때는 먼저 `constraints.txt`에 버전을 고정한 뒤, 필요한 common 또는 서비스별 requirements에 이름만 추가한다.
+- Dockerfile에서는 레포 루트의 `requirements/` 디렉터리를 먼저 복사한 뒤 서비스별 requirements를 설치한다.
+- 버전 업그레이드가 발생하면 `docs/micromart_design.md`의 기술 스택 표와 관련 References 문서를 함께 갱신한다.
+
+---
+
+## 7. `config.py` 규칙
 
 - 모든 설정은 `pydantic-settings` 기반 `Settings` 클래스로 관리한다.
 - 환경변수 이름은 대문자 스네이크 케이스를 사용한다.
-- `.env.example`에는 실제 필요한 값만 명시한다.
+- 애플리케이션 코드는 `.env` 파일을 직접 읽지 않고 **프로세스 환경변수만** 읽는다.
+  Docker Compose의 `env_file`, Kubernetes ConfigMap/Secret, 로컬 실행 스크립트가 `.env`를
+  환경변수로 주입하는 책임을 가진다.
+- `.env.example`에는 실제 필요한 값만 명시하고, Docker 로컬 통합 실행 기준 예시값을 둔다.
 - 운영/개발 환경에서 바뀔 수 있는 값은 하드코딩하지 않는다.
 - 보안 민감값(`JWT_PRIVATE_KEY`, `INTERNAL_SERVICE_TOKEN`, DB 비밀번호)은 코드에 직접 넣지 않는다.
-- `Settings()` 인스턴스는 모듈 레벨에서 생성하지 않는다.
-  `get_settings()`를 `@lru_cache`로 감싸고, 필요한 시점(함수/메서드 내부)에서 호출한다.
+- `Settings()` 인스턴스는 가능하면 요청 처리 시점 또는 앱 초기화 시점에 생성한다.
+  단, `database.py`의 SQLAlchemy engine/session factory 처럼 애플리케이션 시작 시 반드시 필요한 singleton 리소스는 예외적으로 import 시점에 생성할 수 있다.
+  이 경우 필요한 환경변수(`DATABASE_URL` 등)는 반드시 프로세스 시작 전에 주입되어 있어야 한다.
+- `get_settings()`를 `@lru_cache`로 감싸고, 필요한 시점(함수/메서드 내부)에서 호출한다.
   `lru_cache` 덕분에 반복 호출 비용이 없으며, 테스트 시 `get_settings.cache_clear()`로
   환경변수 변경을 즉시 반영할 수 있다. FastAPI 공식 문서도 이 패턴을 권장한다.
 
@@ -126,11 +153,7 @@ class Settings(BaseSettings):
     database_url: str
     internal_service_token: str
 
-    model_config = SettingsConfigDict(
-        env_file=".env",
-        env_file_encoding="utf-8",
-        extra="ignore",
-    )
+    model_config = SettingsConfigDict(extra="ignore")
 
 
 @lru_cache
@@ -138,20 +161,27 @@ def get_settings() -> Settings:
     return Settings()
 ```
 
-> ⚠️ `settings = Settings()` 처럼 모듈 임포트 시점에 인스턴스를 생성하지 않는다.
-> 테스트 환경에서 환경변수가 설정되기 전에 모듈이 임포트되면 잘못된 값이 캐싱될 수 있다.
+### 서비스별 환경변수 목록
+
+| 서비스 | 환경변수 |
+| ------ | -------- |
+| `api-gateway` | `SERVICE_NAME`, `SERVICE_VERSION`, `DEBUG`, `LOG_FORMAT`, `USER_SERVICE_URL`, `PRODUCT_SERVICE_URL`, `ORDER_SERVICE_URL`, `JWKS_URL`, `JWT_ALGORITHM`, `JWT_AUDIENCE`, `JWKS_CACHE_TTL_SECONDS`, `HTTP_TIMEOUT_SECONDS`, `RATE_LIMIT_PER_MINUTE`, `OTEL_ENABLED`, `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_INSECURE` |
+| `user-service` | `SERVICE_NAME`, `SERVICE_VERSION`, `DEBUG`, `LOG_FORMAT`, `DATABASE_URL`, `REDIS_URL`, `JWT_PRIVATE_KEY_FILE`, `JWT_PUBLIC_KEY_FILE`, `JWT_PRIVATE_KEY`, `JWT_PUBLIC_KEY`, `JWT_ALGORITHM`, `ACCESS_TOKEN_EXPIRE_MINUTES`, `REFRESH_TOKEN_EXPIRE_DAYS`, `OTEL_ENABLED`, `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_INSECURE` |
+| `product-service` | `SERVICE_NAME`, `SERVICE_VERSION`, `DEBUG`, `LOG_FORMAT`, `DATABASE_URL`, `REDIS_URL`, `REDIS_SOCKET_CONNECT_TIMEOUT`, `REDIS_SOCKET_TIMEOUT`, `INTERNAL_SERVICE_TOKEN`, `PRODUCT_CACHE_TTL`, `DEFAULT_PAGE_SIZE`, `MAX_PAGE_SIZE`, `OTEL_ENABLED`, `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_INSECURE` |
+| `order-service` | `SERVICE_NAME`, `SERVICE_VERSION`, `DEBUG`, `LOG_FORMAT`, `DATABASE_URL`, `INTERNAL_SERVICE_TOKEN`, `PRODUCT_SERVICE_URL`, `PAYMENT_SERVICE_URL`, `MAX_OPTIMISTIC_RETRY`, `HTTP_TIMEOUT_SECONDS`, `NATS_URL`, `NATS_CONNECT_TIMEOUT_SECONDS`, `OTEL_ENABLED`, `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_INSECURE` |
+| `payment-service` | `SERVICE_NAME`, `SERVICE_VERSION`, `DEBUG`, `LOG_FORMAT`, `DATABASE_URL`, `INTERNAL_SERVICE_TOKEN`, `CHAOS_FAILURE_RATE`, `CHAOS_LATENCY_MS`, `CHAOS_DB_SLOWQUERY`, `OTEL_ENABLED`, `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_INSECURE` |
+| `shared/telemetry` | `OTEL_ENABLED`, `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_INSECURE`, `LOG_FORMAT`, `SERVICE_VERSION` |
+
+`shared/telemetry`는 `config.py`의 `TelemetrySettings`에서 위 환경변수를 읽는다. 각 서비스의 `init_telemetry()` 호출은 서비스명과 DB engine만 넘기고, OTLP endpoint나 로그 포맷은 공통 설정이 프로세스 환경변수에서 로딩한다.
 
 ---
 
-## 7. `database.py` 규칙
+## 8. `database.py` 규칙
 
 - SQLAlchemy 2.0 async 스타일을 사용한다.
 - 세션 의존성은 `AsyncSession` 기반 generator로 제공한다.
 - `expire_on_commit=False`를 기본값으로 사용한다.
 - 공통 타입 별칭 `DBSession`을 사용해 라우터 시그니처를 단순화한다.
-- `engine`과 `async_session_factory`는 `get_settings()`를 함수 내부에서 호출해 생성한다.
-  모듈 레벨에서 `settings = get_settings()`를 호출하면 테스트 환경에서
-  잘못된 DB URL로 엔진이 생성될 수 있다.
 - Redis는 **사용하는 서비스만** 정의한다. Redis가 필요 없는 서비스는 `config.py`와
   `database.py`에 Redis 설정을 추가하지 않는다.
 
@@ -169,7 +199,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from .config import get_settings
 
-settings = get_settings()  # lru_cache로 감싸져 있어 반복 호출 비용 없음
+settings = get_settings()
 
 engine = create_async_engine(
     settings.database_url,
@@ -209,9 +239,23 @@ DBSession = Annotated[AsyncSession, Depends(get_db)]
 > `get_db`를 통째로 `dependency_overrides`로 교체하는 방식을 사용한다.
 > DB URL 자체를 바꿔야 하는 테스트는 별도 엔진을 생성해 오버라이드한다.
 
+### 테스트 환경 주의사항
+
+`database.py`는 import 시점에 SQLAlchemy engine을 생성할 수 있다.
+따라서 pytest에서는 `app.database` 또는 `app.main` import 전에
+필수 환경변수(`DATABASE_URL`, `INTERNAL_SERVICE_TOKEN` 등)를 먼저 주입해야 한다.
+
+권장 패턴:
+
+```python
+os.environ.setdefault("DATABASE_URL", TEST_DATABASE_URL)
+
+from app.main import app
+```
+
 ---
 
-## 8. `models.py` 규칙
+## 9. `models.py` 규칙
 
 - SQLAlchemy 2.0의 `Mapped[...]` + `mapped_column()` 스타일을 사용한다.
 - PK는 특별한 사유가 없으면 `BigInteger` + `autoincrement=True`를 사용한다.
@@ -257,7 +301,7 @@ class User(Base):
 
 ---
 
-## 9. 상태값 규칙
+## 10. 상태값 규칙
 
 - 주문, Saga, 결제, 환불 상태값은 문자열 하드코딩 대신 Python `str + enum.Enum`을 사용한다.
 - 허용 상태값은 반드시 `ERD_structure.md` 기준으로 정의한다.
@@ -278,7 +322,7 @@ class PaymentStatus(str, enum.Enum):
 
 ---
 
-## 10. `schemas.py` 규칙
+## 11. `schemas.py` 규칙
 
 - 요청/응답 스키마는 Pydantic 모델로 분리한다.
 - ORM 모델을 그대로 응답으로 노출하지 않는다.
@@ -307,7 +351,7 @@ class PaymentResponse(BaseModel):
 
 ---
 
-## 11. 라우터 규칙
+## 12. 라우터 규칙
 
 - 라우터는 얇게 유지하고, 비즈니스 로직은 `services/` 또는 별도 함수로 분리한다.
 - 엔드포인트 함수 내부에서 긴 트랜잭션 로직을 직접 작성하지 않는다.
@@ -330,7 +374,7 @@ async def create_payment(payload: PaymentCreateRequest, db: DBSession):
 
 ---
 
-## 12. 서비스 간 호출 규칙
+## 13. 서비스 간 호출 규칙
 
 - 서비스 간 HTTP 호출은 반드시 명시적 timeout을 설정한다.
 - 내부 서비스 호출은 공통적으로 `X-Internal-Token` 헤더를 사용한다.
@@ -355,7 +399,7 @@ headers = {
 
 ---
 
-## 13. API 경계 규칙
+## 14. API 경계 규칙
 
 - 외부 클라이언트용 API와 내부 서비스용 API를 구분한다.
 - 내부 서비스 전용 API는 인증 헤더 없이는 접근할 수 없어야 한다.
@@ -366,7 +410,7 @@ headers = {
 
 ---
 
-## 14. 비즈니스 로직 규칙
+## 15. 비즈니스 로직 규칙
 
 - 결제, 주문, 재고 차감처럼 실패 가능성이 높은 로직은 단계별 상태를 남긴다.
 - 보상 트랜잭션이 필요한 로직은 중간 상태를 DB에 저장해 복구 가능하게 만든다.
@@ -376,7 +420,7 @@ headers = {
 
 ---
 
-## 15. 로깅 / 관찰성 규칙
+## 16. 로깅 / 관찰성 규칙
 
 - 모든 서비스는 `shared/telemetry` 공통 모듈을 우선 사용한다.
 - 로그는 구조화된 JSON 형식을 사용한다.
@@ -387,7 +431,7 @@ headers = {
 
 ---
 
-## 16. 보안 규칙
+## 17. 보안 규칙
 
 - `INTERNAL_SERVICE_TOKEN` 기본값은 개발용으로만 사용하고 운영에서는 반드시 변경한다.
 - private key, DB password, secret token은 절대 코드에 하드코딩하지 않는다.
@@ -397,16 +441,41 @@ headers = {
 
 ---
 
-## 17. 테스트 / 검증 규칙
+## 18. 테스트 / 검증 규칙
 
 - 최소한의 정상 흐름과 실패 흐름을 직접 검증한다.
+- 테스트 디렉터리 이름은 `tests/`를 표준으로 사용한다.
 - 모델 변경 시 생성/조회/상태 변경이 의도대로 되는지 확인한다.
 - 내부 API는 인증 헤더 누락 케이스를 검증한다.
 - 결제/주문/재고 차감 로직은 멱등성, 충돌, 예외 상황을 우선 테스트한다.
+- 테스트 공통 의존성은 `requirements/test-common.txt`를 기준으로 하고, 서비스별 테스트 전용 requirements가 필요하면 해당 서비스 `tests/` 아래에 둔다.
 
 ---
 
-## 18. 문서 동기화 규칙
+## 19. 린트 / 포맷 규칙
+
+- 루트 `pyproject.toml`을 기준으로 Ruff, Black, mypy 설정을 공유한다.
+- Ruff는 `E`, `W`, `F`, `I`, `B`, `UP` 규칙을 기본 적용한다.
+- `UP042`는 예외로 둔다. 상태값 Enum은 프로젝트 도메인 문서 기준에 따라 `str + enum.Enum` 형태를 유지한다.
+- FastAPI의 `Depends`, `Query`, `Header` 등은 기본 인자로 사용하는 공식 패턴이므로 Ruff B008 예외 목록에 포함한다.
+- 라인 길이는 100자를 기준으로 한다.
+
+---
+
+## 20. Docker / 로컬 실행 규칙
+
+- 서비스 Dockerfile은 레포 루트를 build context로 전제한다.
+- Dockerfile은 `requirements/`와 `shared/telemetry/requirements.txt`를 먼저 복사한 뒤 서비스별 `requirements.txt`를 설치한다.
+- 런타임 이미지는 `/app`을 작업 디렉터리로 사용하고 `PYTHONPATH=/app`을 설정한다.
+- 로컬 통합 실행은 Compose 파일을 역할별로 나누어 사용한다.
+  - `docker/infra.yaml`: PostgreSQL, Redis, NATS
+  - `docker/observability.yaml`: OTel Collector, Prometheus, Loki, Tempo, Grafana
+  - `docker/services.yaml`: 애플리케이션 서비스
+- 헬스체크는 런타임 이미지에 curl/wget을 추가하지 않기 위해 Python stdlib `urllib.request` 사용을 기본으로 한다.
+
+---
+
+## 21. 문서 동기화 규칙
 
 다음 변경이 발생하면 관련 문서를 함께 갱신한다.
 
@@ -419,7 +488,7 @@ headers = {
 
 ---
 
-## 19. 커밋 / 작업 규칙
+## 22. 커밋 / 작업 규칙
 
 - 자동 커밋하지 않는다.
 - 의미 없는 대규모 리팩터링을 한 번에 진행하지 않는다.
@@ -428,7 +497,7 @@ headers = {
 
 ---
 
-## 20. 체크리스트
+## 23. 체크리스트
 
 새 서비스 또는 새 기능 구현 전 아래 항목을 확인한다.
 

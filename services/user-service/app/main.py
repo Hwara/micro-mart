@@ -42,7 +42,6 @@ async def lifespan(app: FastAPI):
 
 settings = get_settings()
 
-
 app = FastAPI(
     title="MicroMart User Service",
     version=settings.service_version,

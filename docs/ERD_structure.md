@@ -1,6 +1,6 @@
 # MicroMart — ERD 설계 문서
 
-> 최종 확정일: 2026-05-05
+> 최종 확정일: 2026-05-11
 > 설계 기준: MSA Database per Service 원칙
 > 서비스 간 물리적 FK 없음 — 논리적 ID 참조만 사용
 
@@ -10,7 +10,7 @@
 
 | 원칙 | 내용 |
 | ------ | ------ |
-| DB 분리 | 서비스마다 독립 PostgreSQL 인스턴스 (`user-db`, `product-db`, `order-db`, `payment-db`) |
+| DB 분리 | 서비스마다 독립 DB 스키마/데이터베이스 (`userdb`, `productdb`, `orderdb`, `paymentdb`) |
 | 서비스 간 참조 | 물리적 FK 금지 — `user_id`, `product_id` 등 ID 값만 보관, 일관성은 HTTP 호출로 관리 |
 | PK 타입 | 모든 테이블 `BigInteger` + `autoincrement=True` |
 | Timestamp | `created_at` → `server_default=func.now()`, `updated_at` → `onupdate=func.now()` (DB 서버 시간 기준, NTP drift 방지) |
@@ -81,6 +81,9 @@ class RefundStatus(str, enum.Enum):
 설계 결정 이유
 
 - `token_version`을 Redis가 아닌 DB에 보관하는 이유: Redis는 휘발성이므로 재시작 시 버전 정보가 소실되어 강제 로그아웃이 우회될 수 있음. DB에 영속화하여 신뢰성 확보.
+
+> 로컬 Docker 개발 환경은 운영 배포 단순화를 위해 단일 PostgreSQL 컨테이너에서 서비스별 DB를 나누어 사용한다.
+> 서비스 코드는 다른 서비스 DB에 접근하지 않으므로 Database per Service 경계는 코드 레벨에서 유지된다.
 
 ---
 
@@ -236,3 +239,4 @@ STARTED
 | 2026-05-03 | 최초 ERD 확정 (user, product, order, payment, refunds) |
 | 2026-05-04 | payment-service 구현 완료 반영: `BigIntegerType` 커스텀 타입 추가 주석, `payments.status` DEFAULT `'PENDING'` 명시, `refunds.updated_at` 부재 설계 의도 추가, `PENDING` 선생성 설계 의도 추가 |
 | 2026-05-05 | order-service 구현 완료 반영: `BigIntegerType` 적용 범위를 order-service까지 확장 명시, `order_items.quantity` 단건 최대 100개 제한 추가, 중복 product_id 차단 설계 의도 추가 |
+| 2026-05-11 | 로컬 Docker 개발 환경의 DB 구성 반영: 단일 PostgreSQL 컨테이너 안에서 서비스별 DB를 분리해 사용하되, 서비스 간 물리 FK와 교차 DB 접근은 금지 |

@@ -17,16 +17,37 @@ from .models import Base
 
 settings = get_settings()
 
+
+def _engine_options(database_url: str, debug: bool) -> dict:
+    """
+    SQLAlchemy async engine 옵션을 DB 드라이버에 맞게 구성한다.
+
+    SQLite 테스트 엔진은 pool_size/max_overflow를 지원하지 않으므로 제외하고,
+    PostgreSQL 운영/로컬 엔진에는 커넥션 풀 옵션을 유지한다.
+    """
+    options = {
+        "echo": debug,
+        "pool_pre_ping": True,
+    }
+
+    if not database_url.startswith("sqlite"):
+        options.update(
+            {
+                "pool_size": 5,
+                "max_overflow": 10,
+            }
+        )
+
+    return options
+
+
 # ── SQLAlchemy 비동기 엔진 ──
 # pool_size: 동시에 유지할 DB 연결 수
 # max_overflow: pool_size 초과 시 추가로 허용할 연결 수
 # pool_pre_ping: 쿼리 전에 연결이 살아있는지 확인 (k8s 재배포 시 stale 커넥션 방지)
 engine = create_async_engine(
     settings.database_url,
-    echo=settings.debug,
-    pool_pre_ping=True,
-    pool_size=5,
-    max_overflow=10,
+    **_engine_options(settings.database_url, settings.debug),
 )
 
 # 세션 팩토리: 매번 새로운 AsyncSession을 만들어주는 공장
