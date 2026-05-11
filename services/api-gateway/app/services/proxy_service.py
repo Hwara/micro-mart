@@ -21,6 +21,7 @@ _HOP_BY_HOP_HEADERS = frozenset(
         "content-length",
     }
 )
+_RESPONSE_HEADER_EXCLUDES = _HOP_BY_HOP_HEADERS | {"content-encoding"}
 
 
 def get_target_url(path: str) -> str | None:
@@ -99,7 +100,9 @@ async def proxy_request(request: Request, target_url: str) -> Response:
         )
 
     resp_headers: list[tuple[str, str]] = [
-        (k, v) for k, v in proxy_resp.headers.multi_items() if k.lower() not in _HOP_BY_HOP_HEADERS
+        (k, v)
+        for k, v in proxy_resp.headers.multi_items()
+        if k.lower() not in _RESPONSE_HEADER_EXCLUDES
     ]
 
     resp = Response(

@@ -75,9 +75,11 @@ async def test_rotate_refresh_token_preserves_old_token_when_pipeline_fails() ->
     redis.values["refresh:user:1:web"] = "old-token"
     redis.values["refresh:token:old-token"] = "1:web"
     redis.ttls["refresh:user:1:web"] = 3600
+    original_values = redis.values.copy()
 
     with pytest.raises(RuntimeError):
         await auth_utils.rotate_refresh_token(redis, user_id=1, device="web")
 
+    assert redis.values == original_values
     assert redis.values["refresh:user:1:web"] == "old-token"
     assert redis.values["refresh:token:old-token"] == "1:web"

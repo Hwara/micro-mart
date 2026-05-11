@@ -57,6 +57,27 @@ def _uses_optional_auth(method: str, path: str) -> bool:
     return method == "GET" and (path == "/products" or path.startswith("/products/"))
 
 
+def _extract_bearer_token_from_scope(request: Request) -> str | None:
+    """
+    Read Authorization directly from ASGI scope and return a Bearer token.
+
+    Starlette's request.headers can be memoized before MutableHeaders mutates
+    scope headers, so auth decisions use raw header bytes as the source of truth.
+    The auth scheme is case-insensitive per HTTP auth conventions.
+    """
+    for raw_name, raw_value in request.scope.get("headers", []):
+        if raw_name.lower() != b"authorization":
+            continue
+
+        auth_value = raw_value.decode("latin-1")
+        parts = auth_value.split(None, 1)
+        if len(parts) != 2 or parts[0].lower() != "bearer":
+            return None
+        return parts[1]
+
+    return None
+
+
 def _classify_path(path: str) -> str:
     """
     경로를 그룹 레이블로 변환.
@@ -143,7 +164,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
         path = request.url.path
         method = request.method
         is_public = is_public_path(method, path)
-        auth_header = request.headers.get("Authorization", "")
+        bearer_token = _extract_bearer_token_from_scope(request)
 
         mutable_headers = MutableHeaders(scope=request.scope)
         for header_name in _GATEWAY_IDENTITY_HEADERS:
@@ -153,10 +174,10 @@ class AuthMiddleware(BaseHTTPMiddleware):
         if is_public and not _uses_optional_auth(method, path):
             return await call_next(request)
 
-        if is_public and not auth_header.startswith("Bearer "):
+        if is_public and bearer_token is None:
             return await call_next(request)
 
-        if not auth_header.startswith("Bearer "):
+        if bearer_token is None:
             # 토큰 자체가 없는 경우
             gateway_auth_counter.add(1, {"result": "no_token"})
             return JSONResponse(
@@ -164,10 +185,8 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 content={"detail": "인증 토큰이 필요합니다."},
             )
 
-        token = auth_header[len("Bearer ") :]
-
         try:
-            payload = await verify_jwt(token)
+            payload = await verify_jwt(bearer_token)
         except ValueError as e:
             error_msg = str(e)
             reason = _classify_auth_failure(error_msg)

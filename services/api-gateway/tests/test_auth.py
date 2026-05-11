@@ -220,6 +220,24 @@ class TestJWTVerification:
         assert data["x_user_role"] == "customer"
 
     @pytest.mark.asyncio
+    async def test_bearer_scheme_is_case_insensitive(self, client):
+        """Authorization scheme should accept Bearer regardless of casing."""
+        token = make_access_token(sub="42", role="customer")
+        jwks = make_jwks_response()
+
+        with respx.mock:
+            respx.get("http://user-service:8000/auth/jwks").mock(
+                return_value=Response(200, json=jwks)
+            )
+            respx.get("http://order-service:8000/orders").mock(
+                return_value=Response(200, json={"ok": True})
+            )
+
+            response = await client.get("/orders", headers={"Authorization": f"bearer {token}"})
+
+        assert response.status_code == 200
+
+    @pytest.mark.asyncio
     async def test_admin_role_헤더_주입(self, client):
         """admin role 토큰은 X-User-Role: admin으로 전달."""
         token = make_access_token(sub="1", role="admin")

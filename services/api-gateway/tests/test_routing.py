@@ -8,6 +8,8 @@
   - 하위 서비스 에러 응답이 클라이언트에 그대로 전달됨 (에러 마스킹 없음)
 """
 
+import gzip
+
 import pytest
 import respx
 from httpx import Response
@@ -167,3 +169,27 @@ class TestRouting:
         # gateway는 409를 그대로 반환해야 함 (임의로 500으로 변환하면 안 됨)
         assert response.status_code == 409
         assert response.json()["detail"]["code"] == "INSUFFICIENT_STOCK"
+
+    @pytest.mark.asyncio
+    async def test_content_encoding_header_is_not_forwarded_after_decoding(
+        self, client, authenticated_client_setup
+    ):
+        """Gateway should not forward Content-Encoding for a decoded response body."""
+        token, jwks = authenticated_client_setup
+
+        with respx.mock:
+            respx.get("http://user-service:8000/auth/jwks").mock(
+                return_value=Response(200, json=jwks)
+            )
+            respx.get("http://order-service:8000/orders").mock(
+                return_value=Response(
+                    200,
+                    content=gzip.compress(b'{"orders":[]}'),
+                    headers={"Content-Encoding": "gzip"},
+                )
+            )
+
+            response = await client.get("/orders", headers=auth_headers(token))
+
+        assert response.status_code == 200
+        assert "content-encoding" not in response.headers

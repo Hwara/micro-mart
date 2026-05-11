@@ -9,6 +9,12 @@ def test_internal_service_token_rejects_empty_string() -> None:
         Settings(internal_service_token="")
 
 
+def test_internal_service_token_rejects_whitespace_only_string() -> None:
+    """INTERNAL_SERVICE_TOKEN must reject whitespace-only values."""
+    with pytest.raises(ValidationError):
+        Settings(internal_service_token="   ")
+
+
 def test_internal_service_token_accepts_non_empty_value() -> None:
     """A non-empty internal service token should load normally."""
     settings = Settings(internal_service_token="test-token")

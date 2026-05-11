@@ -33,7 +33,7 @@ _ORIGINAL_ENV = {key: os.environ.get(key) for key in _TEST_ENV}
 # config.py no longer reads .env files directly, so import-time settings users
 # must see test values before app.database/app.main create module-level objects.
 for key, value in _TEST_ENV.items():
-    os.environ.setdefault(key, value)
+    os.environ[key] = value
 
 from app.database import get_db
 from app.main import app
