@@ -1,2 +1,4 @@
 -c ../../requirements/constraints.txt
 -r ../../requirements/service-common.txt
+
+nats-py

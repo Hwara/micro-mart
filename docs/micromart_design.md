@@ -216,9 +216,17 @@ CHAOS_DB_SLOWQUERY=true # DB 슬로우쿼리 시뮬레이션
 
 #### notification-service
 
-- **역할**: NATS `order.completed` 이벤트 소비, 이메일/SMS 발송 시뮬레이션
-- **DB**: 없음 (로그만 기록)
-- **관찰성 포인트**: 메시지 소비 레이턴시, 발송 성공/실패 카운터, 큐 적체 감지
+- **역할**: NATS `order.completed` 이벤트 소비, 주문 완료 알림 발송 시뮬레이션
+- **DB/Redis**: 없음 (stateless consumer)
+- **NATS**: core NATS `order.completed` 구독. 연결 실패 시에도 앱은 기동하고 `/health.nats_connected=false`로 노출.
+- **헬스체크**: `GET /health` — 서비스 상태, NATS 연결 상태, 구독 subject 반환
+- **관찰성 포인트**:
+  - `notification_message_consumed_total` — NATS 메시지 소비 횟수
+  - `notification_send_success_total` — 발송 시뮬레이션 성공 횟수
+  - `notification_send_failed_total` — invalid JSON/payload, 시뮬레이션 실패, 예상치 못한 오류 횟수
+  - `notification_processing_latency_ms` — 메시지 처리 전체 지연
+  - `notification_send_latency_ms` — 발송 시뮬레이션 지연
+- **범위 제외**: 실제 이메일/SMS provider, 알림 이력 DB, user-service 연락처 조회, JetStream durable consumer, DLQ, retry queue
 
 ---
 
@@ -368,7 +376,9 @@ user:{id}:token_version → 버전 번호
 | 재고 부족 | 상품 재고 소진 | order-service 비즈니스 에러 메트릭 |
 | 낙관적 잠금 충돌 | 동시 주문 요청 | `product_stock_conflict_total` 메트릭 급등 |
 | DB 커넥션 풀 고갈 | product-service 부하 증가 | DB pool 메트릭 + 연쇄 에러 트레이스 |
-| 알림 큐 적체 | notification-service 중단 후 재기동 | NATS 메시지 백로그 메트릭 |
+| 알림 소비 지연 | `NOTIFICATION_SEND_DELAY_MS` 증가 | `notification_processing_latency_ms`, `notification_send_latency_ms` 상승 |
+| 알림 발송 실패 | `NOTIFICATION_FAILURE_RATE` 증가 | `notification_send_failed_total{reason="SIMULATED_SEND_FAILURE"}` 증가 + Loki warning 로그 |
+| 알림 payload 오류 | 잘못된 `order.completed` 메시지 발행 | `notification_send_failed_total{reason="INVALID_JSON|INVALID_PAYLOAD"}` 증가 |
 | Saga 보상 트랜잭션 | 결제 거절 발생 | `saga_stock_rollback_total` 증가 + Tempo 롤백 스팬 |
 | Rate Limit 발동 | 고빈도 요청 | `gateway_rate_limit_total` + 429 응답율 급등 |
 | JWT 위조/만료 | 잘못된 토큰 전달 | `gateway_auth_failure_total{reason="expired\|invalid"}` |
@@ -474,6 +484,20 @@ micro-mart/
 │   │   ├── pytest.ini
 │   │   └── requirements.txt
 │   └── notification-service/
+│       ├── app/
+│       │   ├── __init__.py
+│       │   ├── main.py
+│       │   ├── config.py
+│       │   ├── schemas.py
+│       │   ├── nats_client.py
+│       │   └── services/
+│       │       ├── __init__.py
+│       │       └── notification_service.py
+│       ├── tests/
+│       ├── Dockerfile
+│       ├── .env.example
+│       ├── pytest.ini
+│       └── requirements.txt
 ├── shared/
 │   ├── __init__.py
 │   └── telemetry/
@@ -528,7 +552,7 @@ micro-mart/
 5. ✅ **order-service** — 오케스트레이터, Saga 패턴, 서비스 간 호출, NATS 이벤트 발행
 6. ✅ **api-gateway** — JWT 검증 미들웨어(JWKS 캐시), 리버스 프록시, Rate Limiting, 관찰성 메트릭
 7. ✅ **로컬 통합 Compose** — infra/observability/services 분리 구성
-8. ⏳ **notification-service** — NATS 소비, 비동기 처리 (현재 Dockerfile/requirements scaffold)
+8. ✅ **notification-service** — NATS 소비, 알림 발송 시뮬레이션, 관찰성 메트릭
 9. ⏳ **Kubernetes 매니페스트** — Deployment, Service, ConfigMap, Secret
 10. ⏳ **k6 부하 스크립트** — 시나리오별 부하 생성
 

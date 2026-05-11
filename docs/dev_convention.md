@@ -170,6 +170,7 @@ def get_settings() -> Settings:
 | `product-service` | `SERVICE_NAME`, `SERVICE_VERSION`, `DEBUG`, `LOG_FORMAT`, `DATABASE_URL`, `REDIS_URL`, `REDIS_SOCKET_CONNECT_TIMEOUT`, `REDIS_SOCKET_TIMEOUT`, `INTERNAL_SERVICE_TOKEN`, `PRODUCT_CACHE_TTL`, `DEFAULT_PAGE_SIZE`, `MAX_PAGE_SIZE`, `OTEL_ENABLED`, `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_INSECURE` |
 | `order-service` | `SERVICE_NAME`, `SERVICE_VERSION`, `DEBUG`, `LOG_FORMAT`, `DATABASE_URL`, `INTERNAL_SERVICE_TOKEN`, `PRODUCT_SERVICE_URL`, `PAYMENT_SERVICE_URL`, `MAX_OPTIMISTIC_RETRY`, `HTTP_TIMEOUT_SECONDS`, `NATS_URL`, `NATS_CONNECT_TIMEOUT_SECONDS`, `OTEL_ENABLED`, `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_INSECURE` |
 | `payment-service` | `SERVICE_NAME`, `SERVICE_VERSION`, `DEBUG`, `LOG_FORMAT`, `DATABASE_URL`, `INTERNAL_SERVICE_TOKEN`, `CHAOS_FAILURE_RATE`, `CHAOS_LATENCY_MS`, `CHAOS_DB_SLOWQUERY`, `OTEL_ENABLED`, `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_INSECURE` |
+| `notification-service` | `SERVICE_NAME`, `SERVICE_VERSION`, `DEBUG`, `LOG_FORMAT`, `NATS_URL`, `NATS_SUBJECT_ORDER_COMPLETED`, `NATS_CONNECT_TIMEOUT_SECONDS`, `NOTIFICATION_SEND_DELAY_MS`, `NOTIFICATION_FAILURE_RATE`, `OTEL_ENABLED`, `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_INSECURE` |
 | `shared/telemetry` | `OTEL_ENABLED`, `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_INSECURE`, `LOG_FORMAT`, `SERVICE_VERSION` |
 
 `shared/telemetry`는 `config.py`의 `TelemetrySettings`에서 위 환경변수를 읽는다. 각 서비스의 `init_telemetry()` 호출은 서비스명과 DB engine만 넘기고, OTLP endpoint나 로그 포맷은 공통 설정이 프로세스 환경변수에서 로딩한다.
@@ -428,6 +429,14 @@ headers = {
 - 비즈니스 이벤트는 의미 있는 event명을 사용한다. 예: `payment_approved`, `payment_rejected`, `stock_conflict`
 - 에러 로그에는 가능한 범위에서 원인 분류값(`failure_reason`)을 남긴다.
 - 각 서비스의 핵심 비즈니스 이벤트는 OpenTelemetry Counter/Histogram 메트릭으로 계측한다.
+
+### NATS consumer 서비스 규칙
+
+- NATS 연결은 lifespan에서 시도하고, 연결 실패가 서비스 기동 실패가 되어야 하는지 먼저 기능 정의 문서에 명시한다.
+- best-effort consumer는 연결 실패를 `/health`와 warning 로그로 드러내되 앱 기동은 유지할 수 있다.
+- NATS callback에는 복잡한 비즈니스 로직을 직접 두지 않고, raw message payload를 `services/` 계층 함수로 넘긴다.
+- 메시지 처리 실패는 reason 값을 낮은 카디널리티로 분류해 로그와 메트릭에 남긴다.
+- `order_id`, `user_id`, `payment_id` 같은 ID 값은 로그 필드로는 사용할 수 있지만 Prometheus/OTel metric label에는 넣지 않는다.
 
 ---
 

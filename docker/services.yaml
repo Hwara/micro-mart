@@ -125,6 +125,27 @@ services:
       start_period: 15s
     restart: unless-stopped
 
+  # ── notification-service ────────────────────────────────
+  notification-service:
+    build:
+      context: ..
+      dockerfile: services/notification-service/Dockerfile
+    container_name: micromart-notification-service
+    env_file:
+      - ../services/notification-service/.env
+    depends_on:
+      nats:
+        condition: service_healthy
+      otel-collector:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=3).read()\" || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    restart: unless-stopped
+
   # ── api-gateway ──────────────────────────────────────────
   # 외부 단일 진입점: 8080으로 노출
   api-gateway:
