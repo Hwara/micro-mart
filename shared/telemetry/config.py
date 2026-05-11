@@ -24,7 +24,7 @@ class TelemetrySettings(BaseSettings):
 
     otel_enabled: bool = True
     otel_exporter_otlp_endpoint: str = "http://localhost:4317"
-    otel_exporter_otlp_insecure: bool = False
+    otel_exporter_otlp_insecure: bool = True
     log_format: str = "json"
     service_version: str = "0.1.0"
 
