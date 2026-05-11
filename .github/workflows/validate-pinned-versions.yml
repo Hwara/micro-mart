@@ -6,6 +6,9 @@ on:
       - main
       - "feat/**"
 
+permissions:
+  contents: read
+
 jobs:
   validate-pinned-versions:
     runs-on: ubuntu-latest
