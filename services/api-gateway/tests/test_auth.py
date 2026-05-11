@@ -65,6 +65,82 @@ class TestPublicPaths:
             response = await client.get("/products")
         assert response.status_code == 200
 
+    @pytest.mark.asyncio
+    async def test_public_상품목록_위조된_사용자_헤더_제거(self, client):
+        """
+        Public path라도 클라이언트가 직접 보낸 X-User-* 헤더는 제거해야 한다.
+
+        product-service는 gateway가 주입한 헤더만 신뢰하므로, public bypass에서
+        위조 헤더가 그대로 전달되면 active_only=false 같은 admin 분기가 우회된다.
+        """
+
+        def capture_headers(request):
+            return Response(
+                200,
+                json={
+                    "x_user_id": request.headers.get("x-user-id"),
+                    "x_user_role": request.headers.get("x-user-role"),
+                },
+            )
+
+        with respx.mock:
+            respx.get("http://product-service:8000/products").mock(side_effect=capture_headers)
+            response = await client.get(
+                "/products",
+                headers={"x-user-id": "999", "x-user-role": "admin"},
+            )
+
+        assert response.status_code == 200
+        assert response.json() == {"x_user_id": None, "x_user_role": None}
+
+    @pytest.mark.asyncio
+    async def test_public_상품목록_admin_토큰이면_role_주입(self, client):
+        """Public path라도 유효한 Bearer 토큰이 있으면 검증 후 role을 주입한다."""
+        token = make_access_token(sub="1", role="admin")
+        jwks = make_jwks_response()
+
+        def capture_headers(request):
+            return Response(
+                200,
+                json={
+                    "x_user_id": request.headers.get("x-user-id"),
+                    "x_user_role": request.headers.get("x-user-role"),
+                },
+            )
+
+        with respx.mock:
+            respx.get("http://user-service:8000/auth/jwks").mock(
+                return_value=Response(200, json=jwks)
+            )
+            respx.get("http://product-service:8000/products").mock(side_effect=capture_headers)
+
+            response = await client.get(
+                "/products?active_only=false",
+                headers=auth_headers(token),
+            )
+
+        assert response.status_code == 200
+        assert response.json() == {"x_user_id": "1", "x_user_role": "admin"}
+
+    @pytest.mark.asyncio
+    async def test_public_상품목록_만료된_토큰은_401(self, client):
+        """Public path에 Bearer 토큰이 있으면 실패한 인증 시도를 익명으로 낮추지 않는다."""
+        expired_token = make_access_token(sub="1", role="admin", exp_offset=-1)
+        jwks = make_jwks_response()
+
+        with respx.mock:
+            respx.get("http://user-service:8000/auth/jwks").mock(
+                return_value=Response(200, json=jwks)
+            )
+            respx.get("http://product-service:8000/products").mock(
+                return_value=Response(200, json={"items": []})
+            )
+
+            response = await client.get("/products", headers=auth_headers(expired_token))
+
+        assert response.status_code == 401
+        assert response.json()["code"] == "EXPIRED"
+
 
 class TestJWTVerification:
     """JWT 검증 정상/실패 케이스."""

@@ -99,10 +99,15 @@ flowchart LR
   ④ RequestLoggingMiddleware — 요청/응답 구조화 로그 (가장 바깥)
   ```
 
-- **공개 경로(인증 불필요)**:
+- **공개 경로(익명 접근 허용)**:
   - `(ANY) /health` — k8s liveness probe
   - `(ANY) /auth/*` — 로그인·회원가입·토큰 재발급
   - `(GET) /products` 및 `GET /products/*` — 비인증 상품 조회
+- **public optional auth**:
+  - 모든 요청에서 클라이언트가 보낸 `X-User-ID`, `X-User-Role`은 먼저 제거한다.
+  - 공개 경로에 Bearer 토큰이 없으면 익명으로 통과한다.
+  - 공개 경로에 Bearer 토큰이 있으면 검증하고, 성공 시에만 사용자 헤더를 주입한다.
+  - Bearer 토큰 검증 실패는 익명 요청으로 낮추지 않고 `401`로 반환한다.
 - **JWKS 캐시 설계**:
   - 최초 요청 또는 TTL 만료 시 user-service `/auth/jwks` 조회
   - 기본 TTL: 3600초 (환경변수 `JWKS_CACHE_TTL_SECONDS`로 조정)
@@ -285,14 +290,16 @@ user:{id}:token_version → 버전 번호
 ### api-gateway JWT 검증 흐름
 
 ```text
-1. Authorization 헤더에서 Bearer 토큰 추출
-2. jwt.get_unverified_header()로 kid 추출 (네트워크 요청 없음)
-3. JWKSCache.get_public_key(kid)
+1. 요청 진입 시 X-User-ID, X-User-Role 제거
+2. 공개 경로 + Bearer 토큰 없음 → 익명 요청으로 통과
+3. 보호 경로 + Bearer 토큰 없음 → 401 반환
+4. Bearer 토큰이 있으면 jwt.get_unverified_header()로 kid 추출 (네트워크 요청 없음)
+5. JWKSCache.get_public_key(kid)
    ├─ 캐시 유효 + kid 존재 → 즉시 반환 (캐시 히트)
    └─ 캐시 만료 또는 kid 없음 → user-service /auth/jwks 재조회 (캐시 미스)
-4. PyJWT로 서명 + 만료 검증
-5. 성공: X-User-ID, X-User-Role 헤더 주입 후 하위 서비스로 전달
-6. 실패: 401 반환 (reason: expired|invalid|jwks_error)
+6. PyJWT로 서명 + 만료 검증
+7. 성공: X-User-ID, X-User-Role 헤더 주입 후 하위 서비스로 전달
+8. 실패: 401 반환 (reason: expired|invalid|jwks_error)
 ```
 
 ---

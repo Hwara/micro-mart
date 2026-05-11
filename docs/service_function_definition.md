@@ -82,7 +82,7 @@ app.add_middleware(SlowAPIMiddleware)         # ① Rate Limit (가장 먼저 �
 
 Rate Limit을 가장 먼저 실행하는 이유: 악성 트래픽이 JWT 검증 연산 자체를 유발하는 낭비를 막는다. MetricsMiddleware를 Auth 바깥에 두는 이유: 인증 실패 포함 모든 요청의 레이턴시를 측정해야 한다.
 
-#### 공개 경로 (인증 불필요)
+#### 공개 경로 (익명 접근 허용)
 
 | 메서드 | 경로 | 이유 |
 | ------ | ---- | ---- |
@@ -91,6 +91,11 @@ Rate Limit을 가장 먼저 실행하는 이유: 악성 트래픽이 JWT 검증 
 | GET | `/products` 및 `/products/*` | 비인증 상품 조회 허용 |
 
 경계 매칭 방식: `/products` 또는 `/products/`로 시작하는 경로만 허용. `/products-old` 같은 유사 경로 오라우팅 방지.
+
+공개 경로에서도 클라이언트가 직접 보낸 `X-User-ID`, `X-User-Role`은 항상 제거한다. 공개 경로에
+`Authorization: Bearer ...`가 있으면 JWT를 검증하고 성공 시에만 gateway가 사용자 헤더를 다시
+주입한다. 토큰이 없으면 익명 요청으로 통과하지만, Bearer 토큰 검증에 실패하면 익명 요청으로 낮추지
+않고 `401`을 반환한다.
 
 #### JWKS 캐시
 
@@ -110,14 +115,15 @@ class JWKSCache:
 #### JWT 검증 흐름
 
 ```
-1. Authorization 헤더 확인 → 없으면 401 (no_token)
-2. "Bearer " 접두사 확인 → 없으면 401
-3. jwt.get_unverified_header()로 kid 추출
-4. JWKSCache.get_public_key(kid) → 캐시 히트/미스 처리
-5. PyJWT로 서명 + 만료 검증
-6. 성공: MutableHeaders로 X-User-ID, X-User-Role 주입
-         (클라이언트가 헤더를 직접 심는 위조 시도를 덮어쓰기로 방어)
-7. 실패: 401 + code (EXPIRED|INVALID|JWKS_ERROR)
+1. 요청 진입 시 X-User-ID, X-User-Role 제거
+2. 공개 경로 + Authorization 없음 → 익명 요청으로 통과
+3. 보호 경로 + Authorization 없음 또는 Bearer 아님 → 401 (no_token)
+4. Bearer 토큰이 있으면 jwt.get_unverified_header()로 kid 추출
+5. JWKSCache.get_public_key(kid) → 캐시 히트/미스 처리
+6. PyJWT로 서명 + 만료 검증
+7. 성공: MutableHeaders로 X-User-ID, X-User-Role 주입
+         (클라이언트가 헤더를 직접 심는 위조 시도는 사전 제거 후 gateway 값만 전달)
+8. 실패: 401 + code (EXPIRED|INVALID|JWKS_ERROR)
 ```
 
 #### 라우팅 규칙
@@ -170,7 +176,9 @@ class JWKSCache:
 - JWT를 api-gateway에서 한 번만 검증하고 하위 서비스는 헤더를 신뢰한다. 검증 로직 중복을 없애고, 하위 서비스의 관심사를 비즈니스 로직에 집중시킨다.
 - JWKS 캐시를 인메모리에 두는 이유: 매 요청마다 user-service에 검증 요청을 보내면 api-gateway가 병목이 되고, user-service가 SPOF가 된다.
 - `PyJWT + cryptography` 조합을 선택한 이유: `python-jose`는 유지보수가 사실상 중단되었고, PyJWT는 활발히 관리되는 현업 표준 라이브러리다.
-- 클라이언트의 `X-User-ID` 헤더 위조 방어: `MutableHeaders.__setitem__`으로 덮어쓰기. `append`를 쓰면 클라이언트가 위조 헤더를 먼저 심은 경우 두 개의 헤더가 공존하여 하위 서비스가 잘못된 값을 읽을 수 있다.
+- 클라이언트의 `X-User-ID`/`X-User-Role` 헤더 위조 방어: 요청 진입 시 신뢰 헤더를 제거하고,
+  JWT 검증 성공 시에만 `MutableHeaders.__setitem__`으로 gateway 값을 주입한다. public path도
+  이 제거 단계를 거치므로, 익명 상품 조회에서 사용자가 `X-User-Role: admin`을 직접 주입할 수 없다.
 - `api-gateway`에 DB를 두지 않는 이유: stateless를 유지해야 수평 확장(HPA)이 용이하다. 상태를 Redis나 DB에 두는 순간 레플리카 간 동기화 문제가 발생한다.
 - 프록시 로직을 `services/proxy_service.py`로 분리한 이유: 라우터는 HTTP 경계와 Rate Limit만 담당하고, 라우팅 판단·헤더 정리·TraceContext 전파·httpx 예외 매핑은 서비스 계층에서 테스트 가능하게 유지한다.
 - 현재 로컬 학습 환경에서는 Access Token에 aud 클레임을 포함하지 않으므로 audience 검증은 비활성화한다. 운영 또는 다중 수신자 토큰 구조로 확장할 경우 aud 클레임 발급 및 JWT_AUDIENCE 검증을 활성화한다.

@@ -51,7 +51,12 @@ async def proxy_request(request: Request, target_url: str) -> Response:
     trace_id를 이어받도록 한다.
     """
     settings = get_settings()
-    headers = {k: v for k, v in request.headers.items() if k.lower() not in _HOP_BY_HOP_HEADERS}
+    headers = {}
+    # request.headers may be cached before AuthMiddleware mutates scope headers.
+    for raw_key, raw_value in request.scope["headers"]:
+        key = raw_key.decode("latin-1")
+        if key.lower() not in _HOP_BY_HOP_HEADERS:
+            headers[key] = raw_value.decode("latin-1")
     propagate.inject(headers)
 
     body = await request.body()

@@ -44,6 +44,8 @@ from .router import router
 
 logger = structlog.get_logger(__name__)
 
+_GATEWAY_IDENTITY_HEADERS = ("x-user-id", "x-user-role")
+
 
 def _classify_path(path: str) -> str:
     """
@@ -117,7 +119,9 @@ class AuthMiddleware(BaseHTTPMiddleware):
     """
     JWT 검증 미들웨어.
 
-    PUBLIC_PATHS는 검증 없이 통과 (auth_result=no_token으로 기록하지 않음).
+    PUBLIC_PATHS는 토큰이 없으면 익명 요청으로 통과 (auth_result=no_token으로 기록하지 않음).
+    단, public path라도 Bearer 토큰이 있으면 검증하고 실패 시 401을 반환한다.
+    모든 경로에서 클라이언트가 직접 보낸 X-User-ID/Role은 먼저 제거한다.
     나머지 경로:
       - 토큰 없음 → 401, auth_result=no_token
       - 토큰 검증 실패 → 401, auth_result=failure + 실패 유형 상세 카운터
@@ -127,11 +131,17 @@ class AuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         path = request.url.path
         method = request.method
+        is_public = is_public_path(method, path)
+        auth_header = request.headers.get("Authorization", "")
 
-        if is_public_path(method, path):
+        mutable_headers = MutableHeaders(scope=request.scope)
+        for header_name in _GATEWAY_IDENTITY_HEADERS:
+            if header_name in mutable_headers:
+                del mutable_headers[header_name]
+
+        if is_public and not auth_header.startswith("Bearer "):
             return await call_next(request)
 
-        auth_header = request.headers.get("Authorization", "")
         if not auth_header.startswith("Bearer "):
             # 토큰 자체가 없는 경우
             gateway_auth_counter.add(1, {"result": "no_token"})
@@ -169,7 +179,6 @@ class AuthMiddleware(BaseHTTPMiddleware):
         user_id = str(payload.get("sub", ""))
         user_role = str(payload.get("role", "customer"))
 
-        mutable_headers = MutableHeaders(scope=request.scope)
         # append 대신 __setitem__으로 덮어쓰기:
         # 클라이언트가 x-user-id / x-user-role을 직접 심어 보낸 경우를 방어.
         # MutableHeaders.__setitem__은 동일 키를 모두 제거한 뒤 새 값을 단일 추가함.
