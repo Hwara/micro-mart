@@ -92,10 +92,11 @@ Rate Limit을 가장 먼저 실행하는 이유: 악성 트래픽이 JWT 검증 
 
 경계 매칭 방식: `/products` 또는 `/products/`로 시작하는 경로만 허용. `/products-old` 같은 유사 경로 오라우팅 방지.
 
-공개 경로에서도 클라이언트가 직접 보낸 `X-User-ID`, `X-User-Role`은 항상 제거한다. 공개 경로에
-`Authorization: Bearer ...`가 있으면 JWT를 검증하고 성공 시에만 gateway가 사용자 헤더를 다시
-주입한다. 토큰이 없으면 익명 요청으로 통과하지만, Bearer 토큰 검증에 실패하면 익명 요청으로 낮추지
-않고 `401`을 반환한다.
+공개 경로에서도 클라이언트가 직접 보낸 `X-User-ID`, `X-User-Role`은 항상 제거한다. 단,
+optional auth는 `GET /products` 계열에만 적용한다. 상품 조회 경로에 `Authorization: Bearer ...`가
+있으면 JWT를 검증하고 성공 시에만 gateway가 사용자 헤더를 다시 주입한다. `/auth`는 로그인,
+재발급, 로그아웃 등 토큰 수명주기를 user-service가 직접 판단해야 하므로 gateway JWT 검증을
+건너뛴다.
 
 #### JWKS 캐시
 
@@ -116,14 +117,15 @@ class JWKSCache:
 
 ```
 1. 요청 진입 시 X-User-ID, X-User-Role 제거
-2. 공개 경로 + Authorization 없음 → 익명 요청으로 통과
-3. 보호 경로 + Authorization 없음 또는 Bearer 아님 → 401 (no_token)
-4. Bearer 토큰이 있으면 jwt.get_unverified_header()로 kid 추출
-5. JWKSCache.get_public_key(kid) → 캐시 히트/미스 처리
-6. PyJWT로 서명 + 만료 검증
-7. 성공: MutableHeaders로 X-User-ID, X-User-Role 주입
+2. `/auth`, `/health` 공개 경로 → 신뢰 헤더 제거 후 gateway JWT 검증 없이 통과
+3. `GET /products` + Authorization 없음 → 익명 요청으로 통과
+4. 보호 경로 + Authorization 없음 또는 Bearer 아님 → 401 (no_token)
+5. 검증 대상 경로에 Bearer 토큰이 있으면 jwt.get_unverified_header()로 kid 추출
+6. JWKSCache.get_public_key(kid) → 캐시 히트/미스 처리
+7. PyJWT로 서명 + 만료 검증
+8. 성공: MutableHeaders로 X-User-ID, X-User-Role 주입
          (클라이언트가 헤더를 직접 심는 위조 시도는 사전 제거 후 gateway 값만 전달)
-8. 실패: 401 + code (EXPIRED|INVALID|JWKS_ERROR)
+9. 실패: 401 + code (EXPIRED|INVALID|JWKS_ERROR)
 ```
 
 #### 라우팅 규칙
@@ -179,6 +181,8 @@ class JWKSCache:
 - 클라이언트의 `X-User-ID`/`X-User-Role` 헤더 위조 방어: 요청 진입 시 신뢰 헤더를 제거하고,
   JWT 검증 성공 시에만 `MutableHeaders.__setitem__`으로 gateway 값을 주입한다. public path도
   이 제거 단계를 거치므로, 익명 상품 조회에서 사용자가 `X-User-Role: admin`을 직접 주입할 수 없다.
+  `/auth` 경로는 만료 토큰을 포함하더라도 user-service로 전달해 refresh/logout 같은 인증 회복
+  흐름을 gateway가 차단하지 않는다.
 - `api-gateway`에 DB를 두지 않는 이유: stateless를 유지해야 수평 확장(HPA)이 용이하다. 상태를 Redis나 DB에 두는 순간 레플리카 간 동기화 문제가 발생한다.
 - 프록시 로직을 `services/proxy_service.py`로 분리한 이유: 라우터는 HTTP 경계와 Rate Limit만 담당하고, 라우팅 판단·헤더 정리·TraceContext 전파·httpx 예외 매핑은 서비스 계층에서 테스트 가능하게 유지한다.
 - 현재 로컬 학습 환경에서는 Access Token에 aud 클레임을 포함하지 않으므로 audience 검증은 비활성화한다. 운영 또는 다중 수신자 토큰 구조로 확장할 경우 aud 클레임 발급 및 JWT_AUDIENCE 검증을 활성화한다.

@@ -56,6 +56,44 @@ class TestPublicPaths:
         assert response.status_code == 200
 
     @pytest.mark.asyncio
+    async def test_auth_경로_만료된_토큰도_gateway_검증없이_통과(self, client):
+        """
+        /auth/* 경로는 토큰 수명주기를 user-service가 판단해야 한다.
+
+        만료된 access token이 있어도 gateway가 401로 차단하면 refresh/logout 등
+        인증 회복 경로가 막히므로, gateway는 신뢰 헤더만 제거하고 프록시한다.
+        """
+        expired_token = make_access_token(sub="1", role="admin", exp_offset=-1)
+
+        def capture_headers(request):
+            return Response(
+                200,
+                json={
+                    "authorization": request.headers.get("authorization"),
+                    "x_user_id": request.headers.get("x-user-id"),
+                    "x_user_role": request.headers.get("x-user-role"),
+                },
+            )
+
+        with respx.mock:
+            respx.post("http://user-service:8000/auth/refresh").mock(side_effect=capture_headers)
+            response = await client.post(
+                "/auth/refresh",
+                headers={
+                    **auth_headers(expired_token),
+                    "x-user-id": "999",
+                    "x-user-role": "admin",
+                },
+                json={"refresh_token": "refresh-token"},
+            )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["authorization"].startswith("Bearer ")
+        assert data["x_user_id"] is None
+        assert data["x_user_role"] is None
+
+    @pytest.mark.asyncio
     async def test_상품목록_GET_토큰없이_통과(self, client):
         """GET /products는 비인증 조회 허용. mock이 200을 반환하므로 == 200 검증."""
         with respx.mock:

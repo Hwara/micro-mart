@@ -47,6 +47,16 @@ logger = structlog.get_logger(__name__)
 _GATEWAY_IDENTITY_HEADERS = ("x-user-id", "x-user-role")
 
 
+def _uses_optional_auth(method: str, path: str) -> bool:
+    """
+    Return whether a public endpoint should authenticate optional Bearer tokens.
+
+    /auth is handled by user-service because expired tokens are part of its
+    refresh/logout contract. /health is a probe endpoint and never needs JWT.
+    """
+    return method == "GET" and (path == "/products" or path.startswith("/products/"))
+
+
 def _classify_path(path: str) -> str:
     """
     경로를 그룹 레이블로 변환.
@@ -120,7 +130,8 @@ class AuthMiddleware(BaseHTTPMiddleware):
     JWT 검증 미들웨어.
 
     PUBLIC_PATHS는 토큰이 없으면 익명 요청으로 통과 (auth_result=no_token으로 기록하지 않음).
-    단, public path라도 Bearer 토큰이 있으면 검증하고 실패 시 401을 반환한다.
+    단, 상품 조회 public path는 Bearer 토큰이 있으면 검증하고 실패 시 401을 반환한다.
+    /auth는 토큰 수명주기를 user-service가 판단해야 하므로 gateway 검증을 건너뛴다.
     모든 경로에서 클라이언트가 직접 보낸 X-User-ID/Role은 먼저 제거한다.
     나머지 경로:
       - 토큰 없음 → 401, auth_result=no_token
@@ -138,6 +149,9 @@ class AuthMiddleware(BaseHTTPMiddleware):
         for header_name in _GATEWAY_IDENTITY_HEADERS:
             if header_name in mutable_headers:
                 del mutable_headers[header_name]
+
+        if is_public and not _uses_optional_auth(method, path):
+            return await call_next(request)
 
         if is_public and not auth_header.startswith("Bearer "):
             return await call_next(request)
