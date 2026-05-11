@@ -1,6 +1,6 @@
 # MicroMart — AI 개발 컨벤션 가이드
 
-> 최종 갱신일: 2026-05-05
+> 최종 갱신일: 2026-05-11
 > 목적: MicroMart 프로젝트에서 AI/개발자가 일관된 구조와 규칙으로 코드를 작성하도록 하는 기준 문서
 
 ---
@@ -69,6 +69,8 @@ services/<service-name>/
 │   └── middleware/
 ├── Dockerfile
 ├── .env.example
+├── pytest.ini    # 테스트가 있는 서비스
+├── tests/        # 테스트가 있는 서비스
 └── requirements.txt
 ```
 
@@ -82,6 +84,10 @@ services/<service-name>/
 | `order-service` | `services/http_clients.py` | product/payment 서비스 HTTP 클라이언트 (timeout, 에러 래핑) |
 | `order-service` | `services/order_service.py` | Saga 오케스트레이션 비즈니스 로직 |
 | `product-service` | `cache.py` | Redis Cache-Aside 헬퍼 |
+| `product-service` | `services/product_service.py` | 상품 CRUD, Cache-Aside, 재고 차감/복구 비즈니스 로직 |
+| `payment-service` | `services/payment_service.py` | 결제/환불 상태 전이, Chaos Mode, 메트릭 계측 |
+| `user-service` | `services/auth_service.py` | 회원가입, 로그인, 토큰 재발급/로그아웃, JWKS 생성 |
+| `api-gateway` | `services/proxy_service.py` | 라우팅 대상 결정, 프록시 요청, TraceContext 전파 |
 
 ### 파일 역할
 
@@ -165,6 +171,8 @@ def get_settings() -> Settings:
 | `order-service` | `SERVICE_NAME`, `SERVICE_VERSION`, `DEBUG`, `LOG_FORMAT`, `DATABASE_URL`, `INTERNAL_SERVICE_TOKEN`, `PRODUCT_SERVICE_URL`, `PAYMENT_SERVICE_URL`, `MAX_OPTIMISTIC_RETRY`, `HTTP_TIMEOUT_SECONDS`, `NATS_URL`, `NATS_CONNECT_TIMEOUT_SECONDS`, `OTEL_ENABLED`, `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_INSECURE` |
 | `payment-service` | `SERVICE_NAME`, `SERVICE_VERSION`, `DEBUG`, `LOG_FORMAT`, `DATABASE_URL`, `INTERNAL_SERVICE_TOKEN`, `CHAOS_FAILURE_RATE`, `CHAOS_LATENCY_MS`, `CHAOS_DB_SLOWQUERY`, `OTEL_ENABLED`, `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_INSECURE` |
 | `shared/telemetry` | `OTEL_ENABLED`, `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_INSECURE`, `LOG_FORMAT`, `SERVICE_VERSION` |
+
+`shared/telemetry`는 `config.py`의 `TelemetrySettings`에서 위 환경변수를 읽는다. 각 서비스의 `init_telemetry()` 호출은 서비스명과 DB engine만 넘기고, OTLP endpoint나 로그 포맷은 공통 설정이 프로세스 환경변수에서 로딩한다.
 
 ---
 
@@ -436,13 +444,38 @@ headers = {
 ## 18. 테스트 / 검증 규칙
 
 - 최소한의 정상 흐름과 실패 흐름을 직접 검증한다.
+- 테스트 디렉터리 이름은 `tests/`를 표준으로 사용한다.
 - 모델 변경 시 생성/조회/상태 변경이 의도대로 되는지 확인한다.
 - 내부 API는 인증 헤더 누락 케이스를 검증한다.
 - 결제/주문/재고 차감 로직은 멱등성, 충돌, 예외 상황을 우선 테스트한다.
+- 테스트 공통 의존성은 `requirements/test-common.txt`를 기준으로 하고, 서비스별 테스트 전용 requirements가 필요하면 해당 서비스 `tests/` 아래에 둔다.
 
 ---
 
-## 19. 문서 동기화 규칙
+## 19. 린트 / 포맷 규칙
+
+- 루트 `pyproject.toml`을 기준으로 Ruff, Black, mypy 설정을 공유한다.
+- Ruff는 `E`, `W`, `F`, `I`, `B`, `UP` 규칙을 기본 적용한다.
+- `UP042`는 예외로 둔다. 상태값 Enum은 프로젝트 도메인 문서 기준에 따라 `str + enum.Enum` 형태를 유지한다.
+- FastAPI의 `Depends`, `Query`, `Header` 등은 기본 인자로 사용하는 공식 패턴이므로 Ruff B008 예외 목록에 포함한다.
+- 라인 길이는 100자를 기준으로 한다.
+
+---
+
+## 20. Docker / 로컬 실행 규칙
+
+- 서비스 Dockerfile은 레포 루트를 build context로 전제한다.
+- Dockerfile은 `requirements/`와 `shared/telemetry/requirements.txt`를 먼저 복사한 뒤 서비스별 `requirements.txt`를 설치한다.
+- 런타임 이미지는 `/app`을 작업 디렉터리로 사용하고 `PYTHONPATH=/app`을 설정한다.
+- 로컬 통합 실행은 Compose 파일을 역할별로 나누어 사용한다.
+  - `docker/infra.yaml`: PostgreSQL, Redis, NATS
+  - `docker/observability.yaml`: OTel Collector, Prometheus, Loki, Tempo, Grafana
+  - `docker/services.yaml`: 애플리케이션 서비스
+- 헬스체크는 런타임 이미지에 curl/wget을 추가하지 않기 위해 Python stdlib `urllib.request` 사용을 기본으로 한다.
+
+---
+
+## 21. 문서 동기화 규칙
 
 다음 변경이 발생하면 관련 문서를 함께 갱신한다.
 
@@ -455,7 +488,7 @@ headers = {
 
 ---
 
-## 20. 커밋 / 작업 규칙
+## 22. 커밋 / 작업 규칙
 
 - 자동 커밋하지 않는다.
 - 의미 없는 대규모 리팩터링을 한 번에 진행하지 않는다.
@@ -464,7 +497,7 @@ headers = {
 
 ---
 
-## 21. 체크리스트
+## 23. 체크리스트
 
 새 서비스 또는 새 기능 구현 전 아래 항목을 확인한다.
 
