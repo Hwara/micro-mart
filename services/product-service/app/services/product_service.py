@@ -21,7 +21,6 @@ from ..schemas import (
 )
 
 log = structlog.get_logger(__name__)
-settings = get_settings()
 meter = metrics.get_meter("product-service")
 
 cache_hit_counter = meter.create_counter(
@@ -104,6 +103,8 @@ async def get_product_service(product_id: int, db: AsyncSession) -> ProductRespo
 
     캐시 히트 시 DB를 조회하지 않는 기존 성능 특성을 유지한다.
     """
+    settings = get_settings()
+
     cached = await get_cached_product(redis_client, product_id)
     if cached:
         cache_hit_counter.add(1, {"result": "hit"})

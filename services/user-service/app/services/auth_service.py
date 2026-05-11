@@ -15,7 +15,6 @@ from ..models import User
 from ..schemas import LoginRequest, LogoutRequest, RefreshRequest, RegisterRequest, TokenResponse
 
 logger = structlog.get_logger(__name__)
-settings = get_settings()
 meter = metrics.get_meter("user-service")
 
 login_total = meter.create_counter(
@@ -196,6 +195,8 @@ def get_jwks_service() -> dict:
 
     kid와 alg는 gateway 캐시 및 검증 계약이므로 기존 값을 고정 유지한다.
     """
+    settings = get_settings()
+
     public_key = load_pem_public_key(settings.jwt_public_key.encode())
     pub_numbers = (
         public_key.public_key().public_numbers()
