@@ -10,13 +10,15 @@ init_logging(service_name="order-service", log_format=settings.log_format)
 init_telemetry(service_name="order-service", db_engine=engine)
 """
 
+from shared.telemetry.config import TelemetrySettings, get_telemetry_settings
 from shared.telemetry.custom_logging import init_logging
 from shared.telemetry.middleware import RequestLoggingMiddleware
-from shared.telemetry.setup import TelemetrySettings, init_telemetry
+from shared.telemetry.setup import init_telemetry
 
 __all__ = [
-    "init_telemetry",
     "init_logging",
-    "TelemetrySettings",
     "RequestLoggingMiddleware",
+    "TelemetrySettings",
+    "get_telemetry_settings",
+    "init_telemetry",
 ]

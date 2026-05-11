@@ -183,7 +183,7 @@ class TestCreateOrderStockFailure:
     @pytest.mark.asyncio
     async def test_재고부족_주문실패(self, db_session, mocker):
         """
-        재고 부족(INSUFFICIENT_STOCK) → Order FAILED, saga FAILED.
+        재고 부족(INSUFFICIENT_STOCK) → Order FAILED, saga STOCK_ROLLED_BACK.
         restore_stock 호출 없음 (차감된 게 없으므로).
         """
         product = make_product(product_id=1, price=10000, version=1)
@@ -225,7 +225,7 @@ class TestCreateOrderStockFailure:
         order = result.scalar_one_or_none()
         assert order is not None
         assert order.status == OrderStatus.FAILED
-        assert order.saga_status == SagaStatus.FAILED
+        assert order.saga_status == SagaStatus.STOCK_ROLLED_BACK
         assert order.failure_reason == "INSUFFICIENT_STOCK"
 
     @pytest.mark.asyncio

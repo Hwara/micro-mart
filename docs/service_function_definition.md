@@ -1,6 +1,6 @@
 # MicroMart — 서비스 기능 정의 문서
 
-> 최종 갱신일: 2026-05-07
+> 최종 갱신일: 2026-05-11
 > 목적: 서비스별 책임, 엔드포인트, 내부 동작, 서비스 간 호출 계약을 구현 전에 명확히 고정하기 위한 기능 정의 문서
 
 ---
@@ -52,11 +52,13 @@ services/api-gateway/
 ├── app/
 │   ├── main.py           # FastAPI 앱, lifespan (JWKS 워밍업), 미들웨어 등록
 │   ├── config.py         # Settings (JWKS URL, JWT 설정, Rate Limit, HTTP 타임아웃)
-│   ├── router.py         # catch-all 리버스 프록시, _get_target_url, _proxy_request
-│   └── middleware/
+│   ├── router.py         # catch-all HTTP 경계, Rate Limit 적용, 404 응답
+│   ├── middleware/
 │       ├── auth.py       # JWKSCache, verify_jwt, is_public_path
 │       ├── metrics.py    # OTel Counter/Histogram 메트릭 정의
 │       └── rate_limit.py # SlowAPI Limiter 설정
+│   └── services/
+│       └── proxy_service.py # get_target_url, proxy_request
 ├── tests/
 │   ├── conftest.py       # RS256 키쌍 동적 생성, make_jwks_response, make_access_token
 │   ├── test_health.py    # /health 인증 불필요 검증
@@ -80,7 +82,7 @@ app.add_middleware(SlowAPIMiddleware)         # ① Rate Limit (가장 먼저 �
 
 Rate Limit을 가장 먼저 실행하는 이유: 악성 트래픽이 JWT 검증 연산 자체를 유발하는 낭비를 막는다. MetricsMiddleware를 Auth 바깥에 두는 이유: 인증 실패 포함 모든 요청의 레이턴시를 측정해야 한다.
 
-#### 공개 경로 (인증 불필요)
+#### 공개 경로 (익명 접근 허용)
 
 | 메서드 | 경로 | 이유 |
 | ------ | ---- | ---- |
@@ -89,6 +91,12 @@ Rate Limit을 가장 먼저 실행하는 이유: 악성 트래픽이 JWT 검증 
 | GET | `/products` 및 `/products/*` | 비인증 상품 조회 허용 |
 
 경계 매칭 방식: `/products` 또는 `/products/`로 시작하는 경로만 허용. `/products-old` 같은 유사 경로 오라우팅 방지.
+
+공개 경로에서도 클라이언트가 직접 보낸 `X-User-ID`, `X-User-Role`은 항상 제거한다. 단,
+optional auth는 `GET /products` 계열에만 적용한다. 상품 조회 경로에 `Authorization: Bearer ...`가
+있으면 JWT를 검증하고 성공 시에만 gateway가 사용자 헤더를 다시 주입한다. `/auth`는 로그인,
+재발급, 로그아웃 등 토큰 수명주기를 user-service가 직접 판단해야 하므로 gateway JWT 검증을
+건너뛴다.
 
 #### JWKS 캐시
 
@@ -108,14 +116,16 @@ class JWKSCache:
 #### JWT 검증 흐름
 
 ```
-1. Authorization 헤더 확인 → 없으면 401 (no_token)
-2. "Bearer " 접두사 확인 → 없으면 401
-3. jwt.get_unverified_header()로 kid 추출
-4. JWKSCache.get_public_key(kid) → 캐시 히트/미스 처리
-5. PyJWT로 서명 + 만료 + audience 검증
-6. 성공: MutableHeaders로 X-User-ID, X-User-Role 주입
-         (클라이언트가 헤더를 직접 심는 위조 시도를 덮어쓰기로 방어)
-7. 실패: 401 + code (EXPIRED|INVALID|JWKS_ERROR)
+1. 요청 진입 시 X-User-ID, X-User-Role 제거
+2. `/auth`, `/health` 공개 경로 → 신뢰 헤더 제거 후 gateway JWT 검증 없이 통과
+3. `GET /products` + Authorization 없음 → 익명 요청으로 통과
+4. 보호 경로 + Authorization 없음 또는 Bearer 아님 → 401 (no_token)
+5. 검증 대상 경로에 Bearer 토큰이 있으면 jwt.get_unverified_header()로 kid 추출
+6. JWKSCache.get_public_key(kid) → 캐시 히트/미스 처리
+7. PyJWT로 서명 + 만료 검증
+8. 성공: MutableHeaders로 X-User-ID, X-User-Role 주입
+         (클라이언트가 헤더를 직접 심는 위조 시도는 사전 제거 후 gateway 값만 전달)
+9. 실패: 401 + code (EXPIRED|INVALID|JWKS_ERROR)
 ```
 
 #### 라우팅 규칙
@@ -129,6 +139,7 @@ class JWKSCache:
 
 - hop-by-hop 헤더(`connection`, `host`, `transfer-encoding` 등)는 프록시 시 제거
 - `multi_items()`로 중복 헤더(`Set-Cookie` 등) 보존
+- W3C TraceContext 헤더는 `opentelemetry.propagate.inject()`로 하위 서비스에 전파
 - `TimeoutException` → 504 GATEWAY_TIMEOUT
 - `RequestError` → 503 SERVICE_UNAVAILABLE
 - 하위 서비스 4xx/5xx 응답은 마스킹 없이 그대로 전달
@@ -167,8 +178,14 @@ class JWKSCache:
 - JWT를 api-gateway에서 한 번만 검증하고 하위 서비스는 헤더를 신뢰한다. 검증 로직 중복을 없애고, 하위 서비스의 관심사를 비즈니스 로직에 집중시킨다.
 - JWKS 캐시를 인메모리에 두는 이유: 매 요청마다 user-service에 검증 요청을 보내면 api-gateway가 병목이 되고, user-service가 SPOF가 된다.
 - `PyJWT + cryptography` 조합을 선택한 이유: `python-jose`는 유지보수가 사실상 중단되었고, PyJWT는 활발히 관리되는 현업 표준 라이브러리다.
-- 클라이언트의 `X-User-ID` 헤더 위조 방어: `MutableHeaders.__setitem__`으로 덮어쓰기. `append`를 쓰면 클라이언트가 위조 헤더를 먼저 심은 경우 두 개의 헤더가 공존하여 하위 서비스가 잘못된 값을 읽을 수 있다.
+- 클라이언트의 `X-User-ID`/`X-User-Role` 헤더 위조 방어: 요청 진입 시 신뢰 헤더를 제거하고,
+  JWT 검증 성공 시에만 `MutableHeaders.__setitem__`으로 gateway 값을 주입한다. public path도
+  이 제거 단계를 거치므로, 익명 상품 조회에서 사용자가 `X-User-Role: admin`을 직접 주입할 수 없다.
+  `/auth` 경로는 만료 토큰을 포함하더라도 user-service로 전달해 refresh/logout 같은 인증 회복
+  흐름을 gateway가 차단하지 않는다.
 - `api-gateway`에 DB를 두지 않는 이유: stateless를 유지해야 수평 확장(HPA)이 용이하다. 상태를 Redis나 DB에 두는 순간 레플리카 간 동기화 문제가 발생한다.
+- 프록시 로직을 `services/proxy_service.py`로 분리한 이유: 라우터는 HTTP 경계와 Rate Limit만 담당하고, 라우팅 판단·헤더 정리·TraceContext 전파·httpx 예외 매핑은 서비스 계층에서 테스트 가능하게 유지한다.
+- 현재 로컬 학습 환경에서는 Access Token에 aud 클레임을 포함하지 않으므로 audience 검증은 비활성화한다. 운영 또는 다중 수신자 토큰 구조로 확장할 경우 aud 클레임 발급 및 JWT_AUDIENCE 검증을 활성화한다.
 
 ---
 
@@ -182,6 +199,26 @@ class JWKSCache:
 
 - PostgreSQL: 사용자 영속 데이터 저장 (`users`)
 - Redis: 기기별 Refresh Token 저장, 세션 무효화 보조 저장소
+
+#### 파일 구성
+
+```text
+services/user-service/
+├── app/
+│   ├── main.py
+│   ├── config.py
+│   ├── database.py
+│   ├── models.py
+│   ├── schemas.py        # Register/Login/Refresh/Logout/Token 응답 스키마
+│   ├── auth.py           # JWT/비밀번호/Refresh Token Redis 헬퍼
+│   ├── routes/
+│   │   └── auth.py       # HTTP 경계
+│   └── services/
+│       └── auth_service.py # 인증 비즈니스 로직, JWKS 생성
+├── .env.example
+├── Dockerfile
+└── requirements.txt
+```
 
 #### 주요 데이터
 
@@ -198,7 +235,7 @@ class JWKSCache:
     3. 기본 역할은 `customer`
     4. 사용자 생성 후 응답 반환
   - 실패:
-    - 중복 이메일
+    - 중복 이메일 (`409`, 앱 레벨 선검사 + DB UNIQUE 제약)
     - 유효성 검증 실패
 
 - `POST /auth/login`
@@ -224,8 +261,10 @@ class JWKSCache:
 - `POST /auth/logout`
   - 기능: 로그아웃
   - 처리:
-    1. 현재 기기 세션의 Refresh Token 키 삭제
-    2. 이후 재발급 차단
+    1. Bearer Access Token의 `sub`와 Refresh Token 소유자 비교
+    2. 현재 기기 세션의 Refresh Token 키 삭제
+    3. 이미 만료·회전된 Refresh Token은 로그아웃 목적 달성으로 보고 `204` 유지
+    4. 토큰 소유자가 다르면 `403` 반환
 
 - `GET /auth/jwks`
   - 기능: RS256 공개키 제공
@@ -236,6 +275,7 @@ class JWKSCache:
 - 인증은 user-service에 집중시키고 다른 서비스는 JWT를 직접 검증하지 않는다.
 - 공개키 기반 검증으로 gateway가 인증 병목이 되지 않게 한다.
 - `token_version`을 통해 강제 로그아웃과 계정 차단을 안전하게 처리한다.
+- 라우터와 `auth_service.py`를 분리해 HTTP 요청/응답 경계와 Redis/JWT/DB 상태 전이를 명확히 나눈다.
 
 ---
 
@@ -249,6 +289,27 @@ class JWKSCache:
 
 - PostgreSQL: 상품 원본 데이터 저장 (`products`)
 - Redis: 상품 상세 캐시, Cache-Aside 패턴 적용
+
+#### 파일 구성
+
+```text
+services/product-service/
+├── app/
+│   ├── main.py
+│   ├── config.py
+│   ├── database.py
+│   ├── dependencies.py   # require_admin, verify_internal_service
+│   ├── models.py
+│   ├── schemas.py
+│   ├── cache.py
+│   ├── routes/
+│   │   └── products.py   # HTTP 경계
+│   └── services/
+│       └── product_service.py # 상품/재고 비즈니스 로직, 메트릭
+├── .env.example
+├── Dockerfile
+└── requirements.txt
+```
 
 #### 주요 데이터
 
@@ -311,6 +372,7 @@ class JWKSCache:
 - 상품 조회와 주문용 재고 차감을 한 서비스에 두어 재고 정합성을 한 곳에서 유지한다.
 - 삭제는 소프트 삭제로 처리해 주문 이력과 충돌하지 않게 한다.
 - 고부하 환경에서 락 경합을 줄이기 위해 낙관적 잠금을 사용한다.
+- 라우터를 얇게 유지하고 `product_service.py`에 Cache-Aside, 권한 분기, 재고 차감/복구, 메트릭 계측을 모아 테스트 가능성을 높인다.
 
 ---
 
@@ -323,6 +385,27 @@ class JWKSCache:
 #### 저장소
 
 - PostgreSQL: `payments`, `refunds`
+
+#### 파일 구성
+
+```text
+services/payment-service/
+├── app/
+│   ├── main.py
+│   ├── config.py
+│   ├── database.py
+│   ├── dependencies.py
+│   ├── models.py
+│   ├── schemas.py
+│   ├── routes/
+│   │   └── payments.py       # 내부 API HTTP 경계
+│   └── services/
+│       └── payment_service.py # 결제/환불 상태 전이, Chaos Mode, 메트릭
+├── tests/
+├── .env.example
+├── pytest.ini
+└── requirements.txt
+```
 
 #### 주요 데이터
 
@@ -396,6 +479,7 @@ class JWKSCache:
 - `processed_at`을 `created_at`과 분리해 결제 레이턴시를 메트릭으로 관찰 가능하게 한다.
 - `PENDING` 상태로 레코드를 선생성해, 서버 크래시 시에도 요청 접수 기록이 남도록 한다.
 - Redis를 사용하지 않아 `database.py`에 Redis 설정이 없다 (dev_convention.md 준수).
+- 라우터와 `payment_service.py`를 분리해 `X-Internal-Token` 인증 경계와 결제/환불 상태 전이를 명확히 나눈다.
 
 ---
 
@@ -434,7 +518,7 @@ services/order-service/
 │   └── services/
 │       ├── http_clients.py   # product/payment HTTP 클라이언트 (타임아웃, 에러 래핑)
 │       └── order_service.py  # Saga 오케스트레이션 비즈니스 로직
-├── test/
+├── tests/
 ├── .env.example
 ├── pytest.ini
 └── requirements.txt
@@ -552,16 +636,16 @@ PAYMENT_REQUESTED
 1. Client → `api-gateway` (JWT 검증, Rate Limit 체크)
 2. `api-gateway` → `order-service` (X-User-ID, X-User-Role 헤더 주입)
 3. `order-service` → `product-service` 상품 조회 (`GET /products/{id}`)
-4. `order-service` → `product-service` 재고 차감 (`POST /products/{id}/deduct-stock`, `X-Internal-Token`)
-5. `order-service` → `payment-service` 결제 요청 (`POST /payments`, `X-Internal-Token`)
-6. `order-service` → `order-db` 저장
-7. `order-service` → NATS `order.completed`
+4. `order-service` → `order-db` 주문/주문항목 저장 (`PENDING` / `STARTED`)
+5. `order-service` → `product-service` 재고 차감 (`POST /products/{id}/deduct-stock`, `X-Internal-Token`)
+6. `order-service` → `payment-service` 결제 요청 (`POST /payments`, `X-Internal-Token`)
+7. `order-service` → 성공 상태 커밋 후 NATS `order.completed`
 8. `notification-service` 소비
 
 ### 주문 생성 실패 경로
 
 - 상품 미존재/비활성: 주문 생성 전 즉시 실패 (Order DB 저장 없음)
-- 재고 부족: 지금까지 차감된 재고 롤백(`restore-stock`) 후 FAILED
+- 재고 부족: 지금까지 차감된 재고 롤백(`restore-stock`) 후 `FAILED`
 - 결제 실패 (`402 PAYMENT_REJECTED`): 재고 롤백 후 FAILED
 - 롤백 미완료: `STOCK_ROLLBACK_NEEDED` 상태로 남기고 후속 복구 배치 대상 처리
 
@@ -623,7 +707,9 @@ Body:
 
 ## 6. 구현 우선순위
 
-1. ⏳ `notification-service`
+1. ⏳ `notification-service` 앱 코드 구현 (현재 Dockerfile/requirements scaffold만 존재)
+2. ⏳ Kubernetes 매니페스트
+3. ⏳ k6 부하 스크립트
 
 ---
 

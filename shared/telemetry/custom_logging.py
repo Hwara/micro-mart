@@ -18,32 +18,8 @@ Grafana에서 로그 -> 트레이스로 바로 이동(drilldown)할 수 있게 �
 """
 
 import logging
-from typing import Any
 
 import structlog
-from opentelemetry import trace
-
-
-def _add_otel_context(logger: Any, method: str, event_dict: dict) -> dict:
-    """
-    structlog 프로세서: 현재 활성 OTel Span 정보를 로그에 자동 주입
-
-    structlog는 로그를 출력하기 전에 "프로세서 체인"을 거칩니다.
-    이 함수가 체인의 한 단계로 등록되면,
-    모든 로그 호출 시 자동으로 trace_id/span_id가 추가됩니다.
-    """
-    # 현재 활성 Span 가져오기
-    span = trace.get_current_span()
-    span_context = span.get_span_context()
-
-    # 유효한 Span이 있을 때만 컨텍스트 주입
-    # Span이 없는 백그라운드 작업 등에서는 건너뛰기
-    if span_context.is_valid:
-        # trace_id를 32자리 165진수 문자열로 변환
-        event_dict["trace_id"] = format(span_context.trace_id, "032x")
-        event_dict["span_id"] = format(span_context.span_id, "016x")
-
-    return event_dict
 
 
 def init_logging(service_name: str, log_format: str = "pretty") -> None:
@@ -65,13 +41,12 @@ def init_logging(service_name: str, log_format: str = "pretty") -> None:
     # 1. 타임스탬프 추가
     # 2. 로그 레벨 추가
     # 3. service 이름 추가
-    # 4. OTel trace_id/span_id 추가 (직접 만든 커스텀 프로세서)
-    # 5. 스택 트레이스 포맷팅 (예외 발생 시)
+    # 4. 스택 트레이스 포맷팅 (예외 발생 시)
+    # trace_id 및 span_id는 LoggingInstrumentor 에서 자동으로 추가
     shared_processors = [
         structlog.stdlib.add_log_level,
         structlog.processors.TimeStamper(fmt="iso"),
         structlog.contextvars.merge_contextvars,
-        _add_otel_context,
         structlog.processors.StackInfoRenderer(),
         structlog.processors.format_exc_info,
     ]

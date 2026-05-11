@@ -17,15 +17,7 @@ lifespan에서 JWKS 캐시를 미리 워밍업해두어
   하지만 레이턴시/로깅은 인증 실패 포함 모든 요청을 측정해야 하므로 바깥에 위치.
 """
 
-import os
-import sys
 import time
-
-BASE_DIR = os.path.dirname(
-    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-)
-sys.path.append(BASE_DIR)
-
 from contextlib import asynccontextmanager
 
 import structlog
@@ -51,6 +43,39 @@ from .middleware.rate_limit import limiter
 from .router import router
 
 logger = structlog.get_logger(__name__)
+
+_GATEWAY_IDENTITY_HEADERS = ("x-user-id", "x-user-role")
+
+
+def _uses_optional_auth(method: str, path: str) -> bool:
+    """
+    Return whether a public endpoint should authenticate optional Bearer tokens.
+
+    /auth is handled by user-service because expired tokens are part of its
+    refresh/logout contract. /health is a probe endpoint and never needs JWT.
+    """
+    return method == "GET" and (path == "/products" or path.startswith("/products/"))
+
+
+def _extract_bearer_token_from_scope(request: Request) -> str | None:
+    """
+    Read Authorization directly from ASGI scope and return a Bearer token.
+
+    Starlette's request.headers can be memoized before MutableHeaders mutates
+    scope headers, so auth decisions use raw header bytes as the source of truth.
+    The auth scheme is case-insensitive per HTTP auth conventions.
+    """
+    for raw_name, raw_value in request.scope.get("headers", []):
+        if raw_name.lower() != b"authorization":
+            continue
+
+        auth_value = raw_value.decode("latin-1")
+        parts = auth_value.split(None, 1)
+        if len(parts) != 2 or parts[0].lower() != "bearer":
+            return None
+        return parts[1]
+
+    return None
 
 
 def _classify_path(path: str) -> str:
@@ -125,7 +150,10 @@ class AuthMiddleware(BaseHTTPMiddleware):
     """
     JWT 검증 미들웨어.
 
-    PUBLIC_PATHS는 검증 없이 통과 (auth_result=no_token으로 기록하지 않음).
+    PUBLIC_PATHS는 토큰이 없으면 익명 요청으로 통과 (auth_result=no_token으로 기록하지 않음).
+    단, 상품 조회 public path는 Bearer 토큰이 있으면 검증하고 실패 시 401을 반환한다.
+    /auth는 토큰 수명주기를 user-service가 판단해야 하므로 gateway 검증을 건너뛴다.
+    모든 경로에서 클라이언트가 직접 보낸 X-User-ID/Role은 먼저 제거한다.
     나머지 경로:
       - 토큰 없음 → 401, auth_result=no_token
       - 토큰 검증 실패 → 401, auth_result=failure + 실패 유형 상세 카운터
@@ -135,12 +163,21 @@ class AuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         path = request.url.path
         method = request.method
+        is_public = is_public_path(method, path)
+        bearer_token = _extract_bearer_token_from_scope(request)
 
-        if is_public_path(method, path):
+        mutable_headers = MutableHeaders(scope=request.scope)
+        for header_name in _GATEWAY_IDENTITY_HEADERS:
+            if header_name in mutable_headers:
+                del mutable_headers[header_name]
+
+        if is_public and not _uses_optional_auth(method, path):
             return await call_next(request)
 
-        auth_header = request.headers.get("Authorization", "")
-        if not auth_header.startswith("Bearer "):
+        if is_public and bearer_token is None:
+            return await call_next(request)
+
+        if bearer_token is None:
             # 토큰 자체가 없는 경우
             gateway_auth_counter.add(1, {"result": "no_token"})
             return JSONResponse(
@@ -148,10 +185,8 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 content={"detail": "인증 토큰이 필요합니다."},
             )
 
-        token = auth_header[len("Bearer ") :]
-
         try:
-            payload = await verify_jwt(token)
+            payload = await verify_jwt(bearer_token)
         except ValueError as e:
             error_msg = str(e)
             reason = _classify_auth_failure(error_msg)
@@ -177,7 +212,6 @@ class AuthMiddleware(BaseHTTPMiddleware):
         user_id = str(payload.get("sub", ""))
         user_role = str(payload.get("role", "customer"))
 
-        mutable_headers = MutableHeaders(scope=request.scope)
         # append 대신 __setitem__으로 덮어쓰기:
         # 클라이언트가 x-user-id / x-user-role을 직접 심어 보낸 경우를 방어.
         # MutableHeaders.__setitem__은 동일 키를 모두 제거한 뒤 새 값을 단일 추가함.

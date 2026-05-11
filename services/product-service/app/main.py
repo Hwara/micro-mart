@@ -2,14 +2,6 @@
 product-service FastAPI 애플리케이션 진입점
 """
 
-import os
-import sys
-
-BASE_DIR = os.path.dirname(
-    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-)
-sys.path.append(BASE_DIR)
-
 from contextlib import asynccontextmanager
 
 import structlog

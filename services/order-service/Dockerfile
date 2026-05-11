@@ -1,4 +1,4 @@
-FROM python:3.12-slim AS builder
+FROM python:3.12-slim-trixie AS builder
 
 WORKDIR /build
 
@@ -10,14 +10,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN python -m venv /app/venv
 ENV PATH="/app/venv/bin:$PATH"
 
-COPY shared/telemetry/requirements.txt /build/shared-requirements.txt
-RUN pip install --no-cache-dir -r /build/shared-requirements.txt
+COPY requirements/ /build/requirements/
 
-COPY services/order-service/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+COPY shared/telemetry/requirements.txt /build/shared/telemetry/requirements.txt
+RUN pip install --no-cache-dir -r /build/shared/telemetry/requirements.txt
+
+COPY services/order-service/requirements.txt /build/services/order-service/requirements.txt
+RUN pip install --no-cache-dir -r /build/services/order-service/requirements.txt
 
 # ─────────────────────────────────────────────────────────
-FROM python:3.12-slim AS runtime
+FROM python:3.12-slim-trixie AS runtime
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq5 \
@@ -27,6 +29,7 @@ WORKDIR /app
 
 COPY --from=builder /app/venv /app/venv
 ENV PATH="/app/venv/bin:$PATH"
+ENV PYTHONPATH=/app
 
 COPY shared/ /app/shared/
 COPY services/order-service/app /app/app

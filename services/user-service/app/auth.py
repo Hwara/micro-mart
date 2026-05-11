@@ -143,6 +143,39 @@ async def create_refresh_token(
     return token
 
 
+async def rotate_refresh_token(
+    redis: aioredis.Redis,
+    user_id: int,
+    device: str = "web",
+) -> str:
+    """
+    Refresh Token을 원자적으로 회전한다.
+
+    기존 토큰을 먼저 삭제한 뒤 새 토큰 저장에 실패하면 의도치 않은 로그아웃이
+    발생할 수 있으므로, 새 토큰 저장과 기존 토큰 tombstone 전환을 한 pipeline
+    안에서 처리한다.
+    """
+    key = _refresh_token_key(user_id, device)
+    existing_token = await redis.get(key)
+    token = str(uuid.uuid4())
+    reverse_key = f"refresh:token:{token}"
+    expire_seconds = settings.refresh_token_expire_days * 24 * 60 * 60
+    remaining_ttl = await redis.ttl(key)
+    tombstone_ttl = remaining_ttl if remaining_ttl > 0 else expire_seconds
+
+    async with redis.pipeline() as pipe:
+        if existing_token:
+            pipe.setex(
+                f"refresh:token:{existing_token}",
+                tombstone_ttl,
+                f"REVOKED:{user_id}:{device}",
+            )
+        pipe.setex(key, expire_seconds, token)
+        pipe.setex(reverse_key, expire_seconds, f"{user_id}:{device}")
+        await pipe.execute()
+    return token
+
+
 async def verify_refresh_token(
     redis: aioredis.Redis,
     user_id: int,

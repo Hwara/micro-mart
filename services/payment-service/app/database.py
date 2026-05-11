@@ -16,12 +16,33 @@ from .models import Base
 
 settings = get_settings()
 
+
+def _engine_options(database_url: str, debug: bool) -> dict:
+    """
+    SQLAlchemy async engine 옵션을 DB 드라이버에 맞게 구성한다.
+
+    SQLite 테스트 엔진은 pool_size/max_overflow를 지원하지 않으므로 제외하고,
+    PostgreSQL 운영/로컬 엔진에는 커넥션 풀 옵션을 유지한다.
+    """
+    options = {
+        "echo": debug,
+        "pool_pre_ping": True,
+    }
+
+    if not database_url.startswith("sqlite"):
+        options.update(
+            {
+                "pool_size": 5,
+                "max_overflow": 10,
+            }
+        )
+
+    return options
+
+
 engine = create_async_engine(
     settings.database_url,
-    echo=settings.debug,
-    pool_pre_ping=True,
-    pool_size=5,
-    max_overflow=10,
+    **_engine_options(settings.database_url, settings.debug),
 )
 
 async_session_factory = async_sessionmaker(

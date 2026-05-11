@@ -24,31 +24,9 @@ from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
-from pydantic_settings import BaseSettings
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-
-class TelemetrySettings(BaseSettings):
-    """
-    환경변수로 OTel 설정을 주입받습니다.
-    docker-compose나 k8s ConfigMap에서 값을 넣어줍니다.
-    """
-
-    # OTel Collector 주소 (기본값: 로컬 개발용)
-    otel_exporter_otlp_endpoint: str = "http://localhost:4317"
-
-    # OTel TLS 적용 여부 (기본값: 운영용 안전한 기본값)
-    otel_exporter_otlp_insecure: bool = False
-
-    # 로그 출력 포맷: "json" (운영) | "pretty" (로컬 개발)
-    log_format: str = "pretty"
-
-    # 서비스 버전 (Docker 빌드 시 주입)
-    service_version: str = "0.1.0"
-
-    class Config:
-        env_file = ".env"
-        extra = "ignore"  # 정의되지 않은 환경변수는 무시
+from shared.telemetry.config import TelemetrySettings, get_telemetry_settings
 
 
 def init_telemetry(
@@ -69,7 +47,10 @@ def init_telemetry(
         settings:       TelemetrySettings 인스턴스 (없으면 환경변수에서 자동 로딩)
     """
     if settings is None:
-        settings = TelemetrySettings()
+        settings = get_telemetry_settings()
+
+    if not settings.otel_enabled:
+        return
 
     # 1. Resource 정의
     # 이 텔레메트리 데이터가 어느 서비스에서 왔는가 를 표시하는 메타데이터

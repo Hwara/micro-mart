@@ -6,15 +6,6 @@ NATS 커넥션은 nats_client.py 싱글턴으로 관리.
   - 순환 import 방지 + 커넥션 재사용 두 가지 목표 동시 달성
 """
 
-import os
-import sys
-
-BASE_DIR = os.path.dirname(
-    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-)
-sys.path.append(BASE_DIR)
-
-
 from contextlib import asynccontextmanager
 
 import structlog

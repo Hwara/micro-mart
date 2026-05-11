@@ -38,15 +38,9 @@ exporters:
       insecure_skip_verify: true
 
   # 로그 → Loki
-  loki:
-    endpoint: http://loki:3100/loki/api/v1/push
-    default_labels_enabled:
-      exporter: false
-      job: true
-    # service.name을 Loki 레이블로 승격 → 서비스별 로그 필터링 가능
-    # labels:
-    #   resource:
-    #     service.name: "service_name"
+  otlphttp/loki:
+    endpoint: http://loki:3100/otlp
+
 
   # 개발용: Collector 자체 콘솔 출력 (디버깅)
   debug:
@@ -70,4 +64,4 @@ service:
     logs:
       receivers: [otlp]
       processors: [memory_limiter, batch]
-      exporters: [loki, debug]
+      exporters: [otlphttp/loki, debug]

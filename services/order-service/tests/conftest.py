@@ -11,22 +11,45 @@ order-service 테스트 공통 픽스처
 """
 
 import os
-import sys
-
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../..")))
 
 import pytest
 import pytest_asyncio
 from app.config import get_settings
-from app.database import get_db
-from app.main import app
-from app.models import Base
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 INTERNAL_TOKEN = "test-internal-token"
 TEST_USER_ID = 42
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
+_TEST_ENV = {
+    "INTERNAL_SERVICE_TOKEN": INTERNAL_TOKEN,
+    "PRODUCT_SERVICE_URL": "http://mock-product",
+    "PAYMENT_SERVICE_URL": "http://mock-payment",
+    "NATS_URL": "nats://mock-nats:4222",
+    "DATABASE_URL": TEST_DATABASE_URL,
+    "OTEL_ENABLED": "false",
+}
+_ORIGINAL_ENV = {key: os.environ.get(key) for key in _TEST_ENV}
+
+# config.py no longer reads .env files directly, so import-time settings users
+# must see test values before app.database/app.main create module-level objects.
+for key, value in _TEST_ENV.items():
+    os.environ[key] = value
+
+from app.database import get_db
+from app.main import app
+from app.models import Base
+
+
+@pytest.fixture(scope="session", autouse=True)
+def restore_import_time_env():
+    """Restore env vars that conftest set before importing app modules."""
+    yield
+    for key, original in _ORIGINAL_ENV.items():
+        if original is None:
+            os.environ.pop(key, None)
+        else:
+            os.environ[key] = original
+    get_settings.cache_clear()
 
 
 @pytest.fixture(autouse=True)
@@ -41,6 +64,7 @@ def setup_env(monkeypatch):
     monkeypatch.setenv("PAYMENT_SERVICE_URL", "http://mock-payment")
     monkeypatch.setenv("NATS_URL", "nats://mock-nats:4222")
     monkeypatch.setenv("DATABASE_URL", TEST_DATABASE_URL)
+    monkeypatch.setenv("OTEL_ENABLED", "false")
     yield
     get_settings.cache_clear()
 

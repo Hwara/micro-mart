@@ -9,7 +9,7 @@ services:
 
   # ── PostgreSQL ──────────────────────────────────────
   postgres:
-    image: postgres:16-alpine
+    image: postgres:16.13-alpine3.23
     container_name: micromart-postgres
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-micromart}
@@ -33,7 +33,7 @@ services:
 
   # ── Redis ───────────────────────────────────────────
   redis:
-    image: redis:7-alpine
+    image: redis:7.4.8-alpine
     container_name: micromart-redis
     command: >
       redis-server
@@ -56,7 +56,7 @@ services:
   # order-service → notification-service 비동기 메시지용
   # Phase 5(order-service)에서 사용하지만 미리 포함합니다
   nats:
-    image: nats:2-alpine
+    image: nats:2.12.7-alpine
     container_name: micromart-nats
     command: ["-js", "-m", "8222"]
     # -js: JetStream 활성화 (메시지 영속성, 재전송 보장)
