@@ -16,8 +16,11 @@ def _iter_pins(path: Path):
         if not line or "==" not in line:
             continue
 
-        package, version = line.split("==", 1)
-        package = package.strip()
+        # drop environment marker (PEP 508)
+        requirement_part = line.split(";", 1)[0].strip()
+        package_part, version = requirement_part.split("==", 1)
+        # drop extras for PyPI project endpoint
+        package = package_part.split("[", 1)[0].strip()
         version = version.strip()
         if package and version:
             yield line_number, package, version
