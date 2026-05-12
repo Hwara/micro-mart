@@ -612,20 +612,84 @@ PAYMENT_REQUESTED
 
 ---
 
-## 4. 예정 서비스 기능 정의
+## 4. 이벤트 소비 서비스 기능 정의
 
 ### 4.1 notification-service
 
 #### 역할
 
-- NATS에서 `order.completed` 이벤트 소비
-- 이메일/SMS 발송 시뮬레이션
-- 성공/실패 로그 기록
+`notification-service`는 `order-service`가 best-effort로 발행하는 NATS `order.completed` 이벤트를 소비하고, 주문 완료 알림 발송을 시뮬레이션한다. 실제 이메일/SMS provider 연동, 알림 이력 저장, 사용자 연락처 조회는 하지 않으며, 성공/실패/지연을 로그와 메트릭으로 관찰하는 데 집중한다.
 
-#### 특징
+#### 저장소
 
-- DB는 두지 않는다.
-- 관찰성 측면에서 소비 지연, 실패율, 적체를 중점 관찰한다.
+- 없음 (DB/Redis 미사용)
+
+#### 파일 구성
+
+```text
+services/notification-service/
+├── app/
+│   ├── __init__.py
+│   ├── main.py                    # FastAPI 앱, lifespan(NATS 연결/구독), 헬스체크
+│   ├── config.py                  # Settings (NATS, 발송 지연/실패율, OTel)
+│   ├── schemas.py                 # OrderCompletedEvent
+│   ├── nats_client.py             # NATS 싱글턴 (set/get/clear)
+│   └── services/
+│       └── notification_service.py # 메시지 검증, 발송 시뮬레이션, 로그/메트릭
+├── tests/
+├── Dockerfile
+├── .env.example
+├── pytest.ini
+└── requirements.txt
+```
+
+#### NATS 구독
+
+- Subject: `order.completed`
+- Payload:
+
+```json
+{
+  "order_id": 1,
+  "user_id": 10,
+  "total_amount": 25000,
+  "payment_id": 3
+}
+```
+
+- `extra="ignore"` 정책으로 향후 payload 필드가 추가되어도 기존 소비자가 즉시 깨지지 않게 한다.
+- NATS 연결 실패 시 앱 기동은 유지하고 `/health.nats_connected=false`와 warning 로그로 드러낸다.
+- JetStream durable consumer, DLQ, retry queue는 현재 범위에 포함하지 않는다.
+
+#### 엔드포인트
+
+- `GET /health`
+  - 기능: 헬스체크
+  - 응답: `{ "status": "ok", "service": "notification-service", "nats_connected": bool, "subject": "order.completed" }`
+  - 외부 클라이언트용 비즈니스 API는 제공하지 않는다.
+
+#### 실패 처리 정책
+
+| reason | 의미 |
+| ------ | ---- |
+| `INVALID_JSON` | 메시지 bytes가 UTF-8 JSON으로 파싱되지 않음 |
+| `INVALID_PAYLOAD` | JSON은 유효하지만 `OrderCompletedEvent` 스키마를 만족하지 않음 |
+| `SIMULATED_SEND_FAILURE` | 설정된 실패율에 따른 알림 발송 시뮬레이션 실패 |
+| `UNEXPECTED_ERROR` | 예상하지 못한 처리 오류 |
+
+실패한 메시지는 재발행하지 않고, handler 내부에서 예외를 흡수해 프로세스 크래시로 이어지지 않게 한다.
+
+#### 관찰성 메트릭
+
+| 메트릭 이름 | 타입 | 레이블 | 설명 |
+| ----------- | ---- | ------ | ---- |
+| `notification_message_consumed_total` | Counter | `subject` | NATS 메시지 소비 횟수 |
+| `notification_send_success_total` | Counter | `channel` | 알림 발송 성공 횟수 |
+| `notification_send_failed_total` | Counter | `reason`, `channel` | 알림 처리 실패 횟수 |
+| `notification_processing_latency_ms` | Histogram | `subject` | 메시지 수신부터 처리 완료까지 시간 |
+| `notification_send_latency_ms` | Histogram | `channel` | 발송 시뮬레이션 소요 시간 |
+
+초기 `channel` 값은 `email`로 고정한다. `order_id`, `user_id`, `payment_id` 같은 고카디널리티 값은 메트릭 레이블에 넣지 않는다.
 
 ---
 
@@ -707,7 +771,7 @@ Body:
 
 ## 6. 구현 우선순위
 
-1. ⏳ `notification-service` 앱 코드 구현 (현재 Dockerfile/requirements scaffold만 존재)
+1. ✅ `notification-service` 앱 코드 구현
 2. ⏳ Kubernetes 매니페스트
 3. ⏳ k6 부하 스크립트
 

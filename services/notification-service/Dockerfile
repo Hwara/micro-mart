@@ -1,0 +1,37 @@
+FROM python:3.12-slim-trixie AS builder
+
+WORKDIR /build
+
+# notification-service는 DB 없음. nats-py와 공통 런타임 의존성만 설치한다.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN python -m venv /app/venv
+ENV PATH="/app/venv/bin:$PATH"
+
+COPY requirements/ /build/requirements/
+
+COPY shared/telemetry/requirements.txt /build/shared/telemetry/requirements.txt
+RUN pip install --no-cache-dir -r /build/shared/telemetry/requirements.txt
+
+COPY services/notification-service/requirements.txt /build/services/notification-service/requirements.txt
+RUN pip install --no-cache-dir -r /build/services/notification-service/requirements.txt
+
+# ─────────────────────────────────────────────────────────
+FROM python:3.12-slim-trixie AS runtime
+
+WORKDIR /app
+
+COPY --from=builder /app/venv /app/venv
+ENV PATH="/app/venv/bin:$PATH"
+ENV PYTHONPATH=/app
+
+COPY shared/ /app/shared/
+COPY services/notification-service/app /app/app
+
+RUN useradd -r -s /bin/false appuser && chown -R appuser /app
+USER appuser
+
+EXPOSE 8000
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--no-access-log"]
