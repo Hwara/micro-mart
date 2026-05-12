@@ -9,6 +9,25 @@ from datetime import datetime
 
 from sqlalchemy import BigInteger, Boolean, DateTime, Integer, String, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from sqlalchemy.types import TypeDecorator
+
+
+class BigIntegerType(TypeDecorator):
+    """
+    PostgreSQL에서는 BIGINT, SQLite 테스트에서는 INTEGER로 렌더링한다.
+
+    SQLite는 INTEGER PRIMARY KEY만 자동 증가 rowid로 취급하므로, 서비스 로직의
+    실제 생성 흐름을 async SQLite 단위 테스트에서 검증하기 위해 이 호환 타입을 사용한다.
+    """
+
+    impl = BigInteger
+    cache_ok = True
+
+    def load_dialect_impl(self, dialect):
+        """테스트 SQLite와 운영 PostgreSQL의 PK 타입 차이를 dialect별로 맞춘다."""
+        if dialect.name == "sqlite":
+            return dialect.type_descriptor(Integer())
+        return dialect.type_descriptor(BigInteger())
 
 
 class Base(DeclarativeBase):
@@ -23,7 +42,7 @@ class Base(DeclarativeBase):
 class User(Base):
     __tablename__ = "users"
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(BigIntegerType, primary_key=True, autoincrement=True)
     email: Mapped[str] = mapped_column(String, unique=True, nullable=False, index=True)
     hashed_password: Mapped[str] = mapped_column(String, nullable=False)
 
