@@ -8,6 +8,7 @@ from jose import JWTError, jwt
 
 
 def test_hash_and_verify_password() -> None:
+    """비밀번호 해시가 평문과 다르고 검증 결과가 정확한지 확인한다."""
     hashed = auth_utils.hash_password("secret-password")
 
     assert hashed != "secret-password"
@@ -16,6 +17,7 @@ def test_hash_and_verify_password() -> None:
 
 
 def test_create_and_decode_access_token_contains_required_claims() -> None:
+    """생성된 access token에 인증에 필요한 claim이 포함되는지 확인한다."""
     user = User(
         id=7, email="user@example.com", hashed_password="hash", role="admin", token_version=3
     )
@@ -32,6 +34,7 @@ def test_create_and_decode_access_token_contains_required_claims() -> None:
 
 
 def test_decode_access_token_rejects_invalid_signature() -> None:
+    """서명이 변조된 access token은 decode 단계에서 거부되는지 확인한다."""
     settings = get_settings()
     token = jwt.encode({"sub": "1"}, settings.jwt_private_key, algorithm=settings.jwt_algorithm)
     tampered = f"{token[:-1]}x"
@@ -42,6 +45,7 @@ def test_decode_access_token_rejects_invalid_signature() -> None:
 
 @pytest.mark.asyncio
 async def test_create_refresh_token_stores_forward_and_reverse_keys(fake_redis) -> None:
+    """refresh token 생성 시 정방향/역방향 Redis key가 함께 저장되는지 확인한다."""
     token = await auth_utils.create_refresh_token(fake_redis, user_id=1, device="web")
 
     assert fake_redis.values["refresh:user:1:web"] == token
@@ -50,6 +54,7 @@ async def test_create_refresh_token_stores_forward_and_reverse_keys(fake_redis) 
 
 @pytest.mark.asyncio
 async def test_create_refresh_token_deletes_previous_reverse_key(fake_redis) -> None:
+    """같은 device 재발급 시 이전 역방향 key가 고아로 남지 않는지 확인한다."""
     old = await auth_utils.create_refresh_token(fake_redis, user_id=1, device="web")
     new = await auth_utils.create_refresh_token(fake_redis, user_id=1, device="web")
 
@@ -60,6 +65,7 @@ async def test_create_refresh_token_deletes_previous_reverse_key(fake_redis) -> 
 
 @pytest.mark.asyncio
 async def test_verify_refresh_token_matches_stored_token(fake_redis) -> None:
+    """저장 token과 제출 token의 일치 여부만 True로 검증되는지 확인한다."""
     token = await auth_utils.create_refresh_token(fake_redis, user_id=1, device="web")
 
     assert await auth_utils.verify_refresh_token(fake_redis, 1, token, "web") is True
@@ -69,6 +75,7 @@ async def test_verify_refresh_token_matches_stored_token(fake_redis) -> None:
 
 @pytest.mark.asyncio
 async def test_rotate_refresh_token_tombstones_previous_reverse_key(fake_redis) -> None:
+    """refresh token rotation이 이전 token을 tombstone으로 바꾸는지 확인한다."""
     old = await auth_utils.create_refresh_token(fake_redis, user_id=1, device="web")
     new = await auth_utils.rotate_refresh_token(fake_redis, user_id=1, device="web")
 
@@ -82,6 +89,7 @@ async def test_rotate_refresh_token_tombstones_previous_reverse_key(fake_redis) 
 
 @pytest.mark.asyncio
 async def test_revoke_refresh_token_removes_forward_and_keeps_tombstone(fake_redis) -> None:
+    """단일 refresh token 폐기 시 forward key는 삭제되고 tombstone은 유지되는지 확인한다."""
     token = await auth_utils.create_refresh_token(fake_redis, user_id=1, device="mobile")
 
     await auth_utils.revoke_refresh_token(fake_redis, user_id=1, device="mobile")
@@ -92,6 +100,7 @@ async def test_revoke_refresh_token_removes_forward_and_keeps_tombstone(fake_red
 
 @pytest.mark.asyncio
 async def test_revoke_all_refresh_tokens_removes_user_sessions(fake_redis) -> None:
+    """특정 사용자의 모든 device session과 reverse key가 삭제되는지 확인한다."""
     web = await auth_utils.create_refresh_token(fake_redis, user_id=1, device="web")
     mobile = await auth_utils.create_refresh_token(fake_redis, user_id=1, device="mobile")
     other = await auth_utils.create_refresh_token(fake_redis, user_id=2, device="web")

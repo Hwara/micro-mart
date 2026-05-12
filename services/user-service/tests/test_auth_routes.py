@@ -3,6 +3,7 @@ import pytest
 
 @pytest.mark.asyncio
 async def test_register_route_success_and_validation(client) -> None:
+    """회원가입 route의 성공 응답과 기본 body validation 경계를 확인한다."""
     response = await client.post(
         "/auth/register", json={"email": "new@example.com", "password": "pw"}
     )
@@ -19,6 +20,7 @@ async def test_register_route_success_and_validation(client) -> None:
 
 @pytest.mark.asyncio
 async def test_login_refresh_logout_routes(client) -> None:
+    """login, refresh, logout route의 정상 흐름과 필수 입력 검증을 확인한다."""
     await client.post("/auth/register", json={"email": "route@example.com", "password": "pw"})
 
     login = await client.post(
@@ -57,6 +59,7 @@ async def test_login_refresh_logout_routes(client) -> None:
 
 @pytest.mark.asyncio
 async def test_jwks_route(client) -> None:
+    """JWKS route가 공개키 set 형태의 dict를 반환하는지 확인한다."""
     response = await client.get("/auth/jwks")
 
     assert response.status_code == 200

@@ -24,6 +24,7 @@ class BigIntegerType(TypeDecorator):
     cache_ok = True
 
     def load_dialect_impl(self, dialect):
+        """테스트 SQLite와 운영 PostgreSQL의 PK 타입 차이를 dialect별로 맞춘다."""
         if dialect.name == "sqlite":
             return dialect.type_descriptor(Integer())
         return dialect.type_descriptor(BigInteger())

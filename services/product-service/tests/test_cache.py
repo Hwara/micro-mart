@@ -6,6 +6,7 @@ from app.cache import get_cached_product, invalidate_product_cache, set_cached_p
 
 @pytest.mark.asyncio
 async def test_get_cached_product_hit_miss_and_failure(fake_redis) -> None:
+    """상품 상세 캐시 조회가 hit, miss, Redis 장애를 안전하게 처리하는지 확인한다."""
     fake_redis.values["product:detail:1"] = json.dumps({"id": 1, "name": "Keyboard"})
 
     assert await get_cached_product(fake_redis, 1) == {"id": 1, "name": "Keyboard"}
@@ -17,6 +18,7 @@ async def test_get_cached_product_hit_miss_and_failure(fake_redis) -> None:
 
 @pytest.mark.asyncio
 async def test_set_cached_product_stores_json_with_ttl_and_swallows_failure(fake_redis) -> None:
+    """상품 상세 캐시 저장이 JSON과 TTL을 기록하고 Redis 장애를 전파하지 않는지 확인한다."""
     await set_cached_product(fake_redis, 1, {"id": 1, "name": "Keyboard"}, ttl=60)
 
     assert json.loads(fake_redis.values["product:detail:1"]) == {"id": 1, "name": "Keyboard"}
@@ -28,6 +30,7 @@ async def test_set_cached_product_stores_json_with_ttl_and_swallows_failure(fake
 
 @pytest.mark.asyncio
 async def test_invalidate_product_cache_deletes_detail_and_list_keys(fake_redis) -> None:
+    """상품 캐시 무효화가 상세 key와 목록 key를 삭제하고 Redis 장애를 삼키는지 확인한다."""
     fake_redis.values.update(
         {
             "product:detail:1": "{}",

@@ -38,6 +38,7 @@ class FakeRedis:
     """Small async Redis fake for cache-aside tests."""
 
     def __init__(self) -> None:
+        """캐시 값, TTL, 삭제 기록과 실패 플래그를 메모리에 준비한다."""
         self.values: dict[str, str] = {}
         self.ttls: dict[str, int] = {}
         self.deleted: list[str] = []
@@ -47,17 +48,20 @@ class FakeRedis:
         self.fail_delete = False
 
     async def get(self, key: str) -> str | None:
+        """캐시 조회 성공, miss, Redis get 실패를 모두 흉내 낸다."""
         if self.fail_get:
             raise RuntimeError("get failed")
         return self.values.get(key)
 
     async def setex(self, key: str, ttl: int, value: str) -> None:
+        """캐시 저장 값과 TTL을 기록하거나 설정된 실패를 발생시킨다."""
         if self.fail_setex:
             raise RuntimeError("set failed")
         self.values[key] = value
         self.ttls[key] = ttl
 
     async def delete(self, *keys: str) -> int:
+        """삭제된 key를 기록하고 캐시 저장소에서 제거한다."""
         if self.fail_delete:
             raise RuntimeError("delete failed")
         for key in keys:
@@ -67,6 +71,7 @@ class FakeRedis:
         return len(keys)
 
     async def scan(self, cursor: int = 0, match: str | None = None, count: int = 100):
+        """목록 캐시 무효화가 사용하는 SCAN 명령을 prefix matching으로 흉내 낸다."""
         if self.fail_scan:
             raise RuntimeError("scan failed")
         prefix = (match or "").rstrip("*")
@@ -76,6 +81,7 @@ class FakeRedis:
 
 @pytest.fixture(autouse=True)
 def clear_settings_cache() -> AsyncGenerator[None, None]:
+    """환경변수 기반 Settings cache가 테스트 간 공유되지 않도록 초기화한다."""
     get_settings.cache_clear()
     yield
     get_settings.cache_clear()
@@ -83,6 +89,7 @@ def clear_settings_cache() -> AsyncGenerator[None, None]:
 
 @pytest.fixture
 async def db_session() -> AsyncGenerator[AsyncSession, None]:
+    """각 테스트마다 독립적인 async SQLite schema와 session을 제공한다."""
     engine = create_async_engine(
         "sqlite+aiosqlite:///:memory:",
         connect_args={"check_same_thread": False},
@@ -102,6 +109,7 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
 
 @pytest.fixture
 def fake_redis(monkeypatch: pytest.MonkeyPatch) -> FakeRedis:
+    """product service의 Redis client를 메모리 fake로 교체한다."""
     redis = FakeRedis()
     from app.services import product_service
 
@@ -114,7 +122,10 @@ async def client(
     db_session: AsyncSession,
     fake_redis: FakeRedis,
 ) -> AsyncGenerator[AsyncClient, None]:
+    """DB와 Redis 의존성을 fake로 바꾼 FastAPI async client를 제공한다."""
+
     async def override_get_db() -> AsyncGenerator[AsyncSession, None]:
+        """FastAPI route가 테스트 DB session을 사용하도록 주입한다."""
         yield db_session
 
     app.dependency_overrides[get_db] = override_get_db

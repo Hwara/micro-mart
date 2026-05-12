@@ -2,6 +2,7 @@ import pytest
 
 
 async def _route_create(client, name="Keyboard", stock=10):
+    """route 테스트에서 사용할 상품을 admin API로 생성한다."""
     response = await client.post(
         "/products",
         headers={"X-User-Role": "admin"},
@@ -13,6 +14,7 @@ async def _route_create(client, name="Keyboard", stock=10):
 
 @pytest.mark.asyncio
 async def test_list_products_route(client) -> None:
+    """상품 목록 route의 pagination validation과 active_only 권한 경계를 확인한다."""
     await _route_create(client)
     inactive = await _route_create(client, name="Hidden")
     await client.put(
@@ -34,6 +36,7 @@ async def test_list_products_route(client) -> None:
 
 @pytest.mark.asyncio
 async def test_get_product_route(client) -> None:
+    """상품 상세 route가 존재, 미존재, 비활성 상품을 올바른 status로 응답하는지 확인한다."""
     product = await _route_create(client)
     inactive = await _route_create(client, name="Hidden")
     await client.delete(f"/products/{inactive['id']}", headers={"X-User-Role": "admin"})
@@ -45,6 +48,7 @@ async def test_get_product_route(client) -> None:
 
 @pytest.mark.asyncio
 async def test_create_update_delete_admin_boundaries(client) -> None:
+    """상품 생성, 수정, 삭제 route의 관리자 권한과 body validation 경계를 확인한다."""
     created = await _route_create(client)
 
     assert (
@@ -102,6 +106,7 @@ async def test_create_update_delete_admin_boundaries(client) -> None:
 
 @pytest.mark.asyncio
 async def test_deduct_stock_route_internal_token_and_conflicts(client) -> None:
+    """재고 차감 route의 내부 토큰, validation, conflict 응답 경계를 확인한다."""
     product = await _route_create(client, stock=2)
     path = f"/products/{product['id']}/deduct-stock"
 
@@ -145,6 +150,7 @@ async def test_deduct_stock_route_internal_token_and_conflicts(client) -> None:
 
 @pytest.mark.asyncio
 async def test_restore_stock_route_internal_token_and_missing_product(client) -> None:
+    """재고 복구 route의 내부 토큰, validation, 미존재 상품 응답 경계를 확인한다."""
     product = await _route_create(client, stock=2)
     path = f"/products/{product['id']}/restore-stock"
 

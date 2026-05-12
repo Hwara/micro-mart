@@ -17,6 +17,7 @@ from pydantic import ValidationError
 
 
 async def _create_product(db, **kwargs) -> Product:
+    """product service 테스트에 필요한 상품 레코드를 생성한다."""
     product = Product(
         name=kwargs.pop("name", "Keyboard"),
         description=kwargs.pop("description", "Tactile"),
@@ -36,6 +37,7 @@ async def _create_product(db, **kwargs) -> Product:
 
 @pytest.mark.asyncio
 async def test_list_products_filters_permissions_paginates_and_sorts(db_session) -> None:
+    """상품 목록 조회가 active filter, 권한, pagination, 최신순 정렬을 지키는지 확인한다."""
     now = datetime.now(UTC)
     oldest = await _create_product(db_session, name="Old", created_at=now - timedelta(days=2))
     newest = await _create_product(db_session, name="New", created_at=now)
@@ -71,6 +73,7 @@ async def test_list_products_filters_permissions_paginates_and_sorts(db_session)
 
 @pytest.mark.asyncio
 async def test_get_product_uses_cache_or_db_fallback(db_session, fake_redis) -> None:
+    """상품 상세 조회가 cache hit, DB fallback, cache 저장 실패를 안전하게 처리하는지 확인한다."""
     product = await _create_product(db_session)
     fake_redis.values[f"product:detail:{product.id}"] = product_response_json(product)
 
@@ -91,6 +94,7 @@ async def test_get_product_uses_cache_or_db_fallback(db_session, fake_redis) -> 
 
 
 def product_response_json(product: Product) -> str:
+    """ProductResponse 캐시 hit 테스트에 사용할 JSON 문자열을 만든다."""
     return (
         "{"
         f'"id": {product.id}, "name": "{product.name}", "description": "{product.description}", '
@@ -103,6 +107,7 @@ def product_response_json(product: Product) -> str:
 
 @pytest.mark.asyncio
 async def test_get_product_rejects_missing_or_inactive_products(db_session) -> None:
+    """상품 상세 조회가 미존재 또는 비활성 상품을 404로 차단하는지 확인한다."""
     inactive = await _create_product(db_session, is_active=False)
 
     for product_id in [999, inactive.id]:
@@ -113,6 +118,7 @@ async def test_get_product_rejects_missing_or_inactive_products(db_session) -> N
 
 @pytest.mark.asyncio
 async def test_create_product_defaults_and_schema_validation(db_session) -> None:
+    """상품 생성 기본값과 schema validation 실패 경계를 확인한다."""
     response = await create_product_service(
         ProductCreate(name="Mouse", description=None, price=500, stock=3),
         db_session,
@@ -135,6 +141,7 @@ async def test_create_product_defaults_and_schema_validation(db_session) -> None
 async def test_update_product_changes_only_given_fields_and_invalidates_cache(
     db_session, fake_redis
 ) -> None:
+    """상품 수정이 지정 필드만 바꾸고 캐시를 무효화하는지 확인한다."""
     product = await _create_product(db_session, name="Before", price=100, stock=5)
 
     response = await update_product_service(
@@ -154,6 +161,7 @@ async def test_update_product_changes_only_given_fields_and_invalidates_cache(
 
 @pytest.mark.asyncio
 async def test_delete_product_soft_deletes_and_invalidates_cache(db_session, fake_redis) -> None:
+    """상품 삭제가 soft delete로 동작하고 상세 조회와 캐시를 갱신하는지 확인한다."""
     product = await _create_product(db_session)
 
     await delete_product_service(product.id, db_session)
@@ -173,6 +181,7 @@ async def test_delete_product_soft_deletes_and_invalidates_cache(db_session, fak
 
 @pytest.mark.asyncio
 async def test_deduct_stock_success_conflicts_and_state_integrity(db_session, fake_redis) -> None:
+    """재고 차감 성공과 실패 시 stock/version 정합성을 확인한다."""
     product = await _create_product(db_session, stock=5, version=1)
 
     response = await deduct_stock_service(
@@ -210,6 +219,7 @@ async def test_deduct_stock_success_conflicts_and_state_integrity(db_session, fa
 
 @pytest.mark.asyncio
 async def test_deduct_stock_rejects_missing_inactive_and_duplicate_version(db_session) -> None:
+    """재고 차감이 미존재, 비활성, 같은 version 재사용을 거부하는지 확인한다."""
     active = await _create_product(db_session, stock=2, version=1)
     inactive = await _create_product(db_session, is_active=False)
 
@@ -232,6 +242,7 @@ async def test_deduct_stock_rejects_missing_inactive_and_duplicate_version(db_se
 
 @pytest.mark.asyncio
 async def test_restore_stock_success_without_expected_version(db_session, fake_redis) -> None:
+    """재고 복구가 expected_version 없이 stock과 version을 증가시키는지 확인한다."""
     product = await _create_product(db_session, stock=1, version=4)
 
     response = await restore_stock_service(product.id, StockRestoreRequest(quantity=3), db_session)
@@ -243,6 +254,7 @@ async def test_restore_stock_success_without_expected_version(db_session, fake_r
 
 @pytest.mark.asyncio
 async def test_restore_stock_rejects_missing_or_inactive(db_session) -> None:
+    """재고 복구가 미존재 또는 비활성 상품을 404로 차단하는지 확인한다."""
     inactive = await _create_product(db_session, is_active=False)
 
     for product_id in [999, inactive.id]:
