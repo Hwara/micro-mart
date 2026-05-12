@@ -6,6 +6,7 @@ lifespan에서 NATS core subscribe를 등록하며 연결 실패는 앱 기동 �
 """
 
 from contextlib import asynccontextmanager
+from urllib.parse import urlsplit, urlunsplit
 
 import structlog
 from fastapi import FastAPI
@@ -19,6 +20,18 @@ from .services.notification_service import handle_order_completed_message
 logger = structlog.get_logger(__name__)
 
 
+def _sanitize_nats_url(url: str) -> str:
+    """로그에 남길 NATS URL에서 userinfo를 제거한다."""
+    parsed = urlsplit(url)
+    if "@" not in parsed.netloc:
+        return url
+
+    host = parsed.hostname or ""
+    if parsed.port is not None:
+        host = f"{host}:{parsed.port}"
+    return urlunsplit((parsed.scheme, host, parsed.path, parsed.query, parsed.fragment))
+
+
 async def _handle_nats_message(msg) -> None:
     """NATS callback에서 raw payload만 서비스 계층으로 넘긴다."""
     await handle_order_completed_message(msg.data)
@@ -28,6 +41,7 @@ async def _handle_nats_message(msg) -> None:
 async def lifespan(app: FastAPI):
     """앱 시작/종료 시 NATS 연결과 구독을 관리한다."""
     settings = get_settings()
+    sanitized_nats_url = _sanitize_nats_url(settings.nats_url)
 
     try:
         import nats as nats_lib
@@ -40,14 +54,14 @@ async def lifespan(app: FastAPI):
         await nc.subscribe(settings.nats_subject_order_completed, cb=_handle_nats_message)
         logger.info(
             "nats_subscription_started",
-            nats_url=settings.nats_url,
+            nats_url=sanitized_nats_url,
             subject=settings.nats_subject_order_completed,
         )
     except Exception as exc:
         set_nats_client(None)
         logger.warning(
             "nats_connection_failed",
-            nats_url=settings.nats_url,
+            nats_url=sanitized_nats_url,
             subject=settings.nats_subject_order_completed,
             error=str(exc),
         )
