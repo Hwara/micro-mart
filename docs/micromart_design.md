@@ -527,11 +527,12 @@ micro-mart/
 │   └── references/
 │       ├── init-develop-environment.md
 │       ├── shared-telemetry-reference.md
+│       ├── api-gateway.md
 │       ├── user-service.md
 │       ├── product-service.md
-│       ├── phase4_payment_service_references.md
+│       ├── order-service.md
 │       ├── payment-service.md
-│       └── order-service-reference.md
+│       └── notification-service.md
 ├── pyproject.toml
 ├── requirements/
 │   ├── constraints.txt
