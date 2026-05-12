@@ -21,7 +21,7 @@ def test_require_admin_rejects_non_admin_roles(role: str) -> None:
 
 def test_verify_internal_service_accepts_matching_token(monkeypatch: pytest.MonkeyPatch) -> None:
     """내부 서비스 토큰이 설정값과 일치하면 인증이 통과되는지 확인한다."""
-    monkeypatch.setenv("INTERNAL_SERVICE_TOKEN", "expected")
+    monkeypatch.setenv("INTERNAL_SERVICE_TOKEN", "expected")  # noqa: S106
     get_settings.cache_clear()
 
     assert verify_internal_service(x_internal_token="expected") is None

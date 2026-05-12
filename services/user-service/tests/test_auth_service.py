@@ -69,7 +69,7 @@ async def test_login_service_success_stores_refresh_by_device(db_session, fake_r
 
     assert response.token_type == "bearer"
     assert auth_utils.decode_access_token(response.access_token)["sub"] == str(user.id)
-    assert fake_redis.values["refresh:user:1:phone"] == response.refresh_token
+    assert fake_redis.values[f"refresh:user:{user.id}:phone"] == response.refresh_token
 
 
 @pytest.mark.asyncio
@@ -103,7 +103,7 @@ async def test_refresh_service_rotates_tokens(db_session, fake_redis) -> None:
     response = await refresh_service(RefreshRequest(refresh_token=old), db_session)
 
     assert response.refresh_token != old
-    assert fake_redis.values[f"refresh:token:{old}"] == "REVOKED:1:web"
+    assert fake_redis.values[f"refresh:token:{old}"] == f"REVOKED:{user.id}:web"
     assert auth_utils.decode_access_token(response.access_token)["sub"] == str(user.id)
 
 
@@ -124,14 +124,14 @@ async def test_refresh_service_rejects_missing_tombstone_mismatch_and_inactive(
     with pytest.raises(HTTPException) as exc:
         await refresh_service(RefreshRequest(refresh_token=old), db_session)
     assert exc.value.status_code == 401
-    assert "refresh:user:1:web" not in fake_redis.values
+    assert f"refresh:user:{user.id}:web" not in fake_redis.values
 
     mismatch = await auth_utils.create_refresh_token(fake_redis, user.id, "web")
-    fake_redis.values["refresh:user:1:web"] = "different"
+    fake_redis.values[f"refresh:user:{user.id}:web"] = "different"
     with pytest.raises(HTTPException) as exc:
         await refresh_service(RefreshRequest(refresh_token=mismatch), db_session)
     assert exc.value.status_code == 401
-    assert "refresh:user:1:web" not in fake_redis.values
+    assert f"refresh:user:{user.id}:web" not in fake_redis.values
 
     inactive = await _create_user(db_session, email="off@example.com", is_active=False)
     inactive_token = await auth_utils.create_refresh_token(fake_redis, inactive.id, "web")
@@ -161,8 +161,8 @@ async def test_logout_service_revokes_matching_refresh_token(db_session, fake_re
 
     await logout_service(LogoutRequest(refresh_token=refresh), access)
 
-    assert "refresh:user:1:web" not in fake_redis.values
-    assert fake_redis.values[f"refresh:token:{refresh}"] == "REVOKED:1:web"
+    assert f"refresh:user:{user.id}:web" not in fake_redis.values
+    assert fake_redis.values[f"refresh:token:{refresh}"] == f"REVOKED:{user.id}:web"
 
 
 @pytest.mark.asyncio
