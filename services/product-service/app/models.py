@@ -9,6 +9,24 @@ from datetime import datetime
 
 from sqlalchemy import BigInteger, Boolean, CheckConstraint, DateTime, Integer, String, Text, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from sqlalchemy.types import TypeDecorator
+
+
+class BigIntegerType(TypeDecorator):
+    """
+    PostgreSQL에서는 BIGINT, SQLite 테스트에서는 INTEGER로 렌더링한다.
+
+    SQLite는 INTEGER PRIMARY KEY만 자동 증가 rowid로 취급하므로, 서비스 로직의
+    실제 생성 흐름을 async SQLite 단위 테스트에서 검증하기 위해 이 호환 타입을 사용한다.
+    """
+
+    impl = BigInteger
+    cache_ok = True
+
+    def load_dialect_impl(self, dialect):
+        if dialect.name == "sqlite":
+            return dialect.type_descriptor(Integer())
+        return dialect.type_descriptor(BigInteger())
 
 
 class Base(DeclarativeBase):
@@ -31,7 +49,7 @@ class Product(Base):
     __tablename__ = "products"
     __table_args__ = (CheckConstraint("stock >= 0", name="ck_products_stock_nonnegative"),)
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(BigIntegerType, primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     price: Mapped[int] = mapped_column(Integer, nullable=False)
