@@ -42,6 +42,7 @@ async def lifespan(app: FastAPI):
     """앱 시작/종료 시 NATS 연결과 구독을 관리한다."""
     settings = get_settings()
     sanitized_nats_url = _sanitize_nats_url(settings.nats_url)
+    nc = None
 
     try:
         import nats as nats_lib
@@ -58,7 +59,22 @@ async def lifespan(app: FastAPI):
             subject=settings.nats_subject_order_completed,
         )
     except Exception as exc:
-        set_nats_client(None)
+        if nc is not None:
+            if nc.is_closed:
+                set_nats_client(None)
+            else:
+                try:
+                    await nc.close()
+                    set_nats_client(None)
+                except Exception as close_exc:
+                    logger.warning(
+                        "nats_close_after_subscribe_failure_failed",
+                        exception_type=type(close_exc).__name__,
+                        exception_code=getattr(close_exc, "code", None),
+                    )
+        else:
+            set_nats_client(None)
+
         logger.warning(
             "nats_connection_failed",
             nats_url=sanitized_nats_url,
@@ -72,16 +88,19 @@ async def lifespan(app: FastAPI):
 
     logger.info("notification-service 종료 시작")
     nc = get_nats_client()
-    if nc and not nc.is_closed:
-        try:
-            await nc.close()
-        except Exception as exc:
-            logger.warning(
-                "nats_close_failed",
-                exception_type=type(exc).__name__,
-                exception_code=getattr(exc, "code", None),
-            )
-    clear_nats_client()
+    if nc:
+        if nc.is_closed:
+            clear_nats_client()
+        else:
+            try:
+                await nc.close()
+                clear_nats_client()
+            except Exception as exc:
+                logger.warning(
+                    "nats_close_failed",
+                    exception_type=type(exc).__name__,
+                    exception_code=getattr(exc, "code", None),
+                )
     logger.info("notification-service 종료 완료")
 
 
