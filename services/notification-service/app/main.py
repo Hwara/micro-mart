@@ -63,7 +63,8 @@ async def lifespan(app: FastAPI):
             "nats_connection_failed",
             nats_url=sanitized_nats_url,
             subject=settings.nats_subject_order_completed,
-            error=str(exc),
+            exception_type=type(exc).__name__,
+            exception_code=getattr(exc, "code", None),
         )
 
     logger.info("notification-service 시작 완료", version=settings.service_version)
@@ -75,7 +76,11 @@ async def lifespan(app: FastAPI):
         try:
             await nc.close()
         except Exception as exc:
-            logger.warning("nats_close_failed", error=str(exc))
+            logger.warning(
+                "nats_close_failed",
+                exception_type=type(exc).__name__,
+                exception_code=getattr(exc, "code", None),
+            )
     clear_nats_client()
     logger.info("notification-service 종료 완료")
 
