@@ -378,7 +378,7 @@ user:{id}:token_version → 버전 번호
 | DB 커넥션 풀 고갈 | product-service 부하 증가 | DB pool 메트릭 + 연쇄 에러 트레이스 |
 | 알림 소비 지연 | `NOTIFICATION_SEND_DELAY_MS` 증가 | `notification_processing_latency_ms`, `notification_send_latency_ms` 상승 |
 | 알림 발송 실패 | `NOTIFICATION_FAILURE_RATE` 증가 | `notification_send_failed_total{reason="SIMULATED_SEND_FAILURE"}` 증가 + Loki warning 로그 |
-| 알림 payload 오류 | 잘못된 `order.completed` 메시지 발행 | `notification_send_failed_total{reason="INVALID_JSON|INVALID_PAYLOAD"}` 증가 |
+| 알림 payload 오류 | 잘못된 `order.completed` 메시지 발행 | `notification_send_failed_total{reason="INVALID_JSON\|INVALID_PAYLOAD"}` 증가 |
 | Saga 보상 트랜잭션 | 결제 거절 발생 | `saga_stock_rollback_total` 증가 + Tempo 롤백 스팬 |
 | Rate Limit 발동 | 고빈도 요청 | `gateway_rate_limit_total` + 429 응답율 급등 |
 | JWT 위조/만료 | 잘못된 토큰 전달 | `gateway_auth_failure_total{reason="expired\|invalid"}` |
