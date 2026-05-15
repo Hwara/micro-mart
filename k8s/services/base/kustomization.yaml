@@ -1,0 +1,7 @@
+resources:
+  - user-service
+  - product-service
+  - order-service
+  - payment-service
+  - api-gateway
+  - notification-service

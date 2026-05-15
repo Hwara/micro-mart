@@ -1,0 +1,52 @@
+resources:
+  - namespace.yaml
+  - ../../base
+
+namespace: micro-mart-local
+
+configMapGenerator:
+  - name: user-service-config
+    envs:
+      - config/user-service.env
+  - name: product-service-config
+    envs:
+      - config/product-service.env
+  - name: order-service-config
+    envs:
+      - config/order-service.env
+  - name: payment-service-config
+    envs:
+      - config/payment-service.env
+  - name: notification-service-config
+    envs:
+      - config/notification-service.env
+  - name: api-gateway-config
+    envs:
+      - config/api-gateway.env
+
+secretGenerator:
+  - name: user-database-secrets
+    envs:
+      - secrets/user-database-secret.env
+  - name: product-database-secrets
+    envs:
+      - secrets/product-database-secret.env
+  - name: order-database-secrets
+    envs:
+      - secrets/order-database-secret.env
+  - name: payment-database-secrets
+    envs:
+      - secrets/payment-database-secret.env
+  - name: redis-secrets
+    envs:
+      - secrets/redis-secrets.env
+  - name: nats-secrets
+    envs:
+      - secrets/nats-secrets.env
+  - name: internal-service-token-secrets
+    envs:
+      - secrets/internal-service-token-secret.env
+  - name: jwt-keys
+    files:
+      - secrets/keys/public.pem
+      - secrets/keys/private.pem

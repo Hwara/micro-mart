@@ -1,46 +1,53 @@
-# 현재 구조
+# Kubernetes 구성
 
-- `namespaces/` : 사용하는 namespace 정의
-- `services/` : 각 서비스별 `deployment.yaml`, `service.yaml`, `config.yaml` 포함된 디렉토리 존재
-- `secrets/` : 사용하는 secrets 정의
-- `db/` : `postgrsql`, `redis` 구축
+이 디렉터리는 micro-mart를 Kubernetes 로컬 환경에 배포하기 위한 manifest를 담고 있습니다.
 
-# Secrets
+## 디렉터리 구조
 
-## 현재 사용중인 secrets
+```text
+k8s/
+├── db/                    # PostgreSQL, Redis 등 로컬 인프라 구성
+├── namespaces/            # 공통 namespace 매니페스트
+├── registry/              # 로컬 이미지 registry 구성
+└── services/
+    ├── base/              # 환경과 무관한 서비스 Deployment/Service 기본 정의
+    └── overlays/
+        └── local/         # 로컬 Kubernetes 환경용 ConfigMap/Secret/namespace 조합
+```
 
-- `user-database-secrets` : user-service가 사용하는 DATABASE_URL (Host, ID, Password, DB 포함)
-- `product-database-secrets` : product-service가 사용하는 DATABASE_URL (Host, ID, Password, DB 포함)
-- `order-database-secrets` : order-service가 사용하는 DATABASE_URL (Host, ID, Password, DB 포함)
-- `payment-database-secrets` : payment-service가 사용하는 DATABASE_URL (Host, ID, Password, DB 포함)
-- `redis-secrets` : REDIS_URL (Host 포함, 비밀번호 없는 상태)
-- `nats-secrets` : NATS_URL (Host 포함)
-- `internal-service-token-secrets` : INTERNAL_SERVICE_TOKEN (내부 통신용 토큰)
+## 로컬 서비스 배포
 
-## 서비스 별 secrets 사용
+### JWT key Secret 준비
 
-### user-service
+`user-service`는 RS256 JWT 서명을 위해 private/public key 파일이 필요합니다.
 
-- `user-database-secrets`
-- `redis-secrets`
+로컬 환경에서는 repository root의 `keys/` 파일을 overlay의 ignored secret 경로로 복사합니다.
 
-### product-service
+repository root 기준:
 
-- `product-database-secrets`
-- `redis-secrets`
-- `internal-service-token-secrets`
+```bash
+mkdir -p k8s/services/overlays/local/secrets/keys
+cp keys/public.pem k8s/services/overlays/local/secrets/keys/public.pem
+cp keys/private.pem k8s/services/overlays/local/secrets/keys/private.pem
+```
 
-### order-service
+### Kustomize 실행
 
-- `order-database-secrets`
-- `nats-secrets`
-- `internal-service-token-secrets`
+repository root 기준:
 
-### payment-service
+```bash
+kubectl apply -k k8s/services/overlays/local
+```
 
-- `payment-database-secrets`
-- `internal-service-token-secrets`
+렌더링 결과 확인:
 
-### notification-service
+```bash
+kubectl kustomize k8s/services/overlays/local
+```
 
-- `nats-secrets`
+## base와 overlay 역할
+
+- `services/base/` : 서비스별 Deployment와 Service 정의
+- `services/overlays/local/` : 로컬 실행용 namespace, configmap, secret generator 정의
+- `services/overlays/local/config/` : Git에 커밋 가능한 로컬 기본 설정 값
+- `services/overlays/local/secrets/` : 실제 secret env 파일과 JWT 파일을 두되 실제 값은 Git에 커밋하지 않고 example 만 남김
