@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: nats
+  namespace: micro-mart
+spec:
+  selector:
+    matchLabels:
+      svc: nats
+  serviceName: nats
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        svc: nats
+    spec:
+      containers:
+        - name: nats
+          image: nats
+          ports:
+            - containerPort: 4222
+            - containerPort: 8222
+          args: ["-js", "-m", "8222"]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nats
+  namespace: micro-mart
+spec:
+  type: ClusterIP
+  selector:
+    svc: nats
+  ports:
+    - port: 4222
+      name: client
+    - port: 8222
+      name: web-ui
