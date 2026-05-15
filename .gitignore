@@ -26,3 +26,4 @@ dist/
 
 # k8s secrets
 k8s/**/secret.yaml
+k8s/**/secrets/*.yaml

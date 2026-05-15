@@ -1,0 +1,41 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: product-service
+  name: product-service
+  namespace: micro-mart
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: product-service
+  strategy: {}
+  template:
+    metadata:
+      labels:
+        app: product-service
+    spec:
+      containers:
+        - image: 172.25.46.10:32000/product-service
+          name: product-service
+          envFrom:
+            - configMapRef:
+                name: product-service-config
+            - secretRef:
+                name: database-secrets
+            - secretRef:
+                name: redis-secrets
+            - secretRef:
+                name: internal-service-token-secrets
+          # 하나씩 가져오는 예제
+          # env:
+          #   - name: DATABASE_URL
+          #     valueFrom:
+          #       secretKeyRef:
+          #         name: database-secrets
+          #         key: DATABASE_URL
+
+          resources: {}
+
+status: {}

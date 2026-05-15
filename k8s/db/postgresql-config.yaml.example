@@ -1,0 +1,5 @@
+# 실제 환경에서 수정할 것
+auth:
+  postgresPassword: "micromart"
+  password: "micromart"
+  database: "userdb"

@@ -1,0 +1,19 @@
+apiVersion: v1
+data:
+  DEBUG: "true"
+  HTTP_TIMEOUT_SECONDS: "5.0"
+  LOG_FORMAT: json
+  MAX_OPTIMISTIC_RETRY: "3"
+  NATS_CONNECT_TIMEOUT_SECONDS: "5"
+  OTEL_ENABLED: "true"
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+  OTEL_EXPORTER_OTLP_INSECURE: "true"
+  OTEL_PYTHON_EXCLUDED_URLS: health
+  PAYMENT_SERVICE_URL: http://payment-service:8000
+  PRODUCT_SERVICE_URL: http://product-service:8000
+  SERVICE_NAME: order-service
+  SERVICE_VERSION: 0.1.0
+kind: ConfigMap
+metadata:
+  name: order-service-config
+  namespace: micro-mart

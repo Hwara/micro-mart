@@ -1,0 +1,41 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: order-service
+  name: order-service
+  namespace: micro-mart
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: order-service
+  strategy: {}
+  template:
+    metadata:
+      labels:
+        app: order-service
+    spec:
+      containers:
+        - image: 172.25.46.10:32000/order-service
+          name: order-service
+          envFrom:
+            - configMapRef:
+                name: order-service-config
+            - secretRef:
+                name: database-secrets
+            - secretRef:
+                name: nats-secrets
+            - secretRef:
+                name: internal-service-token-secrets
+          # 하나씩 가져오는 예제
+          # env:
+          #   - name: DATABASE_URL
+          #     valueFrom:
+          #       secretKeyRef:
+          #         name: database-secrets
+          #         key: DATABASE_URL
+
+          resources: {}
+
+status: {}

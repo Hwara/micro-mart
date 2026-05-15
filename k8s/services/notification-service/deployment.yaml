@@ -1,0 +1,37 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: notification-service
+  name: notification-service
+  namespace: micro-mart
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: notification-service
+  strategy: {}
+  template:
+    metadata:
+      labels:
+        app: notification-service
+    spec:
+      containers:
+        - image: 172.25.46.10:32000/notification-service
+          name: notification-service
+          envFrom:
+            - configMapRef:
+                name: notification-service-config
+            - secretRef:
+                name: nats-secrets
+          # 하나씩 가져오는 예제
+          # env:
+          #   - name: DATABASE_URL
+          #     valueFrom:
+          #       secretKeyRef:
+          #         name: database-secrets
+          #         key: DATABASE_URL
+
+          resources: {}
+
+status: {}

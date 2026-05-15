@@ -1,0 +1,26 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: api-gateway
+  name: api-gateway
+  namespace: micro-mart
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: api-gateway
+  strategy: {}
+  template:
+    metadata:
+      labels:
+        app: api-gateway
+    spec:
+      containers:
+        - image: 172.25.46.10:32000/api-gateway
+          name: api-gateway
+          envFrom:
+            - configMapRef:
+                name: api-gateway-config
+          resources: {}
+status: {}
