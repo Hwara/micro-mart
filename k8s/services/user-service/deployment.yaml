@@ -23,7 +23,7 @@ spec:
             - configMapRef:
                 name: user-service-config
             - secretRef:
-                name: database-secrets
+                name: user-database-secrets
             - secretRef:
                 name: redis-secrets
           # 하나씩 가져오는 예제

@@ -23,7 +23,7 @@ spec:
             - configMapRef:
                 name: product-service-config
             - secretRef:
-                name: database-secrets
+                name: product-database-secrets
             - secretRef:
                 name: redis-secrets
             - secretRef:

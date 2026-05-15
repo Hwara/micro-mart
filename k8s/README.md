@@ -9,7 +9,10 @@
 
 ## 현재 사용중인 secrets
 
-- `database-secrets` : DATABASE_URL (Host, ID, Password, DB 포함)
+- `user-database-secrets` : user-service가 사용하는 DATABASE_URL (Host, ID, Password, DB 포함)
+- `product-database-secrets` : product-service가 사용하는 DATABASE_URL (Host, ID, Password, DB 포함)
+- `order-database-secrets` : order-service가 사용하는 DATABASE_URL (Host, ID, Password, DB 포함)
+- `payment-database-secrets` : payment-service가 사용하는 DATABASE_URL (Host, ID, Password, DB 포함)
 - `redis-secrets` : REDIS_URL (Host 포함, 비밀번호 없는 상태)
 - `nats-secrets` : NATS_URL (Host 포함)
 - `internal-service-token-secrets` : INTERNAL_SERVICE_TOKEN (내부 통신용 토큰)
@@ -18,24 +21,24 @@
 
 ### user-service
 
-- `database-secrets`
+- `user-database-secrets`
 - `redis-secrets`
 
 ### product-service
 
-- `database-secrets`
+- `product-database-secrets`
 - `redis-secrets`
-- `database-secrets`
+- `internal-service-token-secrets`
 
 ### order-service
 
-- `database-secrets`
+- `order-database-secrets`
 - `nats-secrets`
 - `internal-service-token-secrets`
 
 ### payment-service
 
-- `database-secrets`
+- `payment-database-secrets`
 - `internal-service-token-secrets`
 
 ### notification-service

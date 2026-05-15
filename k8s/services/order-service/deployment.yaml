@@ -23,7 +23,7 @@ spec:
             - configMapRef:
                 name: order-service-config
             - secretRef:
-                name: database-secrets
+                name: order-database-secrets
             - secretRef:
                 name: nats-secrets
             - secretRef:

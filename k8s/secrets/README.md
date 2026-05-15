@@ -1,9 +1,12 @@
 # DB Secret 생성 예제
 
+- DB를 필요로 하는 서비스 별로 4개의 Secrets을 생성해야 함.
+- userdb, productdb, orderdb, paymentdb 총 4개
+
 ```bash
 kubectl create secret generic database-secrets -n micro-mart --from-literal=DATABASE_URL=postgresql+asyncpg://micromart:micromart@postgresql:5432/userdb --dry-run=client -o yaml > database-secrets.yaml
 
-kubectl apply -f database-secrets.yaml
+kubectl apply -f user-database-secrets.yaml
 ```
 
 # Redis Secret 생성 예제
@@ -19,7 +22,7 @@ kubectl apply -f redis-secrets.yaml
 - /keys 디렉터리로 이동
 
 ```bash
-kubectl create secret generic jwt-keys --from-file=private.pem --from-file=public.pem --dry-run=client -o yaml > jwt-keys-secrets.yaml
+kubectl create secret generic jwt-keys -n micro-mart --from-file=private.pem --from-file=public.pem --dry-run=client -o yaml > jwt-keys-secrets.yaml
 ```
 
 # internal token Secret 생성 예제

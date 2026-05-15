@@ -23,7 +23,7 @@ spec:
             - configMapRef:
                 name: payment-service-config
             - secretRef:
-                name: database-secrets
+                name: payment-database-secrets
             - secretRef:
                 name: internal-service-token-secrets
           # 하나씩 가져오는 예제
