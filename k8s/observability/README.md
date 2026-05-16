@@ -4,11 +4,14 @@
 
 ```bash
 kubectl create namespace monitoring
+kubectl create namespace micro-mart
 ```
 
 또는 `helm install` 실행할 때 `--create-namespace` 추가
 
 ## OTel Collector
+
+otel-collector는 `micro-mart` namespace에 배포 -> DB, Redis 등 인프라 namespace
 
 ```bash
 helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts

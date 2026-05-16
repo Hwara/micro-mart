@@ -17,6 +17,12 @@ k8s/
 
 ## 로컬 서비스 배포
 
+### DB, Redis 등 선행 인프라 배포
+
+1. 네임스페이스 생성 - `kubectl apply -f k8s/namespaces/namespace.yaml`
+2. `k8s/db/README.md`에 따라 DB 및 Redis 배포
+3. NATS 배포 - `kubectl apply -f k8s/nats/nats.yaml`
+
 ### JWT key Secret 준비
 
 `user-service`는 RS256 JWT 서명을 위해 private/public key 파일이 필요합니다.
