@@ -11,7 +11,7 @@ datasources:
       - name: Loki
         type: loki
         uid: loki
-        url: http://loki.monitoring.svc.cluster.local:3100
+        url: http://loki-gateway.monitoring.svc.cluster.local:3100
         editable: true
         jsonData:
           # 로그에서 trace_id 필드를 클릭하면 Tempo로 drilldown
