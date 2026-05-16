@@ -87,6 +87,8 @@ docker compose `
 | `docker/observability.yaml` | OTel Collector, Prometheus, Loki, Tempo, Grafana |
 | `docker/services.yaml` | 애플리케이션 서비스 |
 
+Kubernetes 로컬 배포는 [`k8s/README.md`](k8s/)를 참고하세요.
+
 ## 프로젝트 구조
 
 ```text
@@ -94,6 +96,7 @@ micro-mart/
 ├── services/       # api-gateway, user/product/order/payment/notification 서비스
 ├── shared/         # 공통 OpenTelemetry 및 로깅 모듈
 ├── docker/         # 로컬 infra, observability, service Compose 구성
+├── k8s/            # Kubernetes 인프라, 관찰성, 서비스 배포 매니페스트
 ├── docs/           # 설계, 기능 정의, 컨벤션, reference 문서
 ├── requirements/   # 공통 런타임/테스트 의존성 및 constraints
 └── README.md
@@ -109,6 +112,9 @@ micro-mart/
 | 2 | [`docs/service_function_definition.md`](docs/service_function_definition.md) | 서비스별 책임, 엔드포인트 계약, 서비스 간 호출 흐름 |
 | 3 | [`docs/micromart_design.md`](docs/micromart_design.md) | 전체 아키텍처, 설계 의도, 관찰성 시나리오 |
 | 4 | [`docs/dev_convention.md`](docs/dev_convention.md) | 코드 컨벤션, 파일 구조, 보안 및 테스트 규칙 |
+| 5 | [`k8s/README.md`](k8s/README.md) | 로컬 Kubernetes 배포 흐름 |
+| 6 | [`k8s/db/README.md`](k8s/db/README.md) | PostgreSQL, Redis 준비 |
+| 7 | [`k8s/observability/README.md`](k8s/observability/README.md) | LGTM/OTel 배포 |
 
 ## 구현 현황
 
@@ -122,5 +128,5 @@ micro-mart/
 | `api-gateway` | 완료 |
 | 로컬 통합 Compose | 완료 |
 | `notification-service` | 완료 |
-| Kubernetes 매니페스트 | 예정 |
+| Kubernetes 매니페스트 | 완료 |
 | k6 부하 스크립트 | 예정 |

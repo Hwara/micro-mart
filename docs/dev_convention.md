@@ -488,6 +488,7 @@ headers = {
   `deployment.yaml`, `service.yaml`, `kustomization.yaml`을 둔다.
 - 로컬 Kubernetes 실행은 `k8s/services/overlays/local/` overlay를 사용한다.
   이 overlay는 서비스별 ConfigMap, Secret, JWT key Secret, local namespace를 생성한다.
+  local overlay의 기본 이미지 주소는 `172.25.46.10:32000/<service-name>:local`이다.
 - 각 애플리케이션 Deployment는 `/health`를 `livenessProbe`와 `readinessProbe`로 사용한다.
   `/health`는 인증 없이 호출 가능해야 하며, probe 때문에 비즈니스 상태가 변경되면 안 된다.
 - 환경변수는 `envFrom.configMapRef`와 `envFrom.secretRef`로 주입한다. 민감값을
@@ -500,6 +501,11 @@ headers = {
 - 앱 local overlay namespace는 `micro-mart-local`이다. PostgreSQL, Redis, NATS,
   OTel Collector 같은 공용 인프라는 `micro-mart` namespace를 사용한다.
   Prometheus, Grafana, Loki, Tempo는 `monitoring` namespace를 사용한다.
+- 애플리케이션 컨테이너는 기본적으로 non-root UID/GID `10001`로 실행한다.
+  `allowPrivilegeEscalation: false`, `readOnlyRootFilesystem: true`,
+  `capabilities.drop: [ALL]`, `seccompProfile: RuntimeDefault`를 적용한다.
+- read-only root filesystem을 사용할 때 애플리케이션이 써야 하는 경로는 `/tmp`처럼
+  명시적 volume(`emptyDir` 등)으로 제공한다. 이미지 내부 경로에 암묵적으로 쓰지 않는다.
 
 ### Kubernetes 리소스 정책
 
@@ -526,6 +532,9 @@ resources:
   배포한다. chart 기본 설정은 하나의 DB만 자동 생성하므로, 서비스별 DB는 psql 또는 향후
   migration 절차로 생성한다.
 - Redis와 NATS는 로컬 학습 환경에서 단일 인스턴스 manifest를 사용할 수 있다.
+  Redis manifest는 `redis:8.6.3`, non-root UID/GID `999`, PVC `128Mi`를 기준으로 한다.
+  NATS manifest는 `nats:2.14.0`, JetStream enabled, `/tmp/nats` PVC `1Gi`,
+  read-only root filesystem을 기준으로 한다.
 - OTel Collector는 `micro-mart` namespace에 배포하고, 애플리케이션 서비스는
   `OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector.micro-mart.svc.cluster.local:4317`로
   데이터를 전송한다.

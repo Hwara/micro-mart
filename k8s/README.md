@@ -8,7 +8,7 @@
 k8s/
 ├── db/                    # PostgreSQL, Redis 등 로컬 인프라 구성
 ├── namespaces/            # 공통 namespace 매니페스트
-├── registry/              # 로컬 이미지 registry 구성
+├── observability/         # 관찰성 스택 환경 구성
 └── services/
     ├── base/              # 환경과 무관한 서비스 Deployment/Service 기본 정의
     └── overlays/
@@ -101,6 +101,10 @@ kubectl apply -k k8s/services/overlays/local
 ```bash
 kubectl kustomize k8s/services/overlays/local
 ```
+
+### 이후 필요에 따라 관찰성 스택 환경 구축
+
+Kubernetes 관찰성 스택 환경 구축은 [`k8s/observability/README.md`](observability/)를 참고하세요.
 
 ## base와 overlay 역할
 

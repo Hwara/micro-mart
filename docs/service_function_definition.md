@@ -769,22 +769,10 @@ Body:
 
 ---
 
-## 6. 구현 우선순위
-
-1. ✅ `notification-service` 앱 코드 구현
-2. ✅ Kubernetes 매니페스트
-3. ⏳ k6 부하 스크립트
-
-Kubernetes 배포 매니페스트는 애플리케이션 서비스별 `Deployment`, `Service`,
-`kustomization.yaml`과 local overlay의 ConfigMap/Secret generator를 포함한다.
-각 서비스의 `/health` 엔드포인트는 liveness/readiness probe로 사용되며, HTTP API 계약,
-DB 모델, 서비스 간 호출 규격은 변경하지 않는다.
-
----
-
-## 7. 문서 운영 원칙
+## 6. 문서 운영 원칙
 
 - 구현 완료된 서비스는 실제 코드와 문서를 함께 갱신한다.
 - 예정 서비스는 엔드포인트 계약이 바뀌면 먼저 이 문서를 수정한다.
 - README는 요약본, 이 문서는 구현 기준서로 유지한다.
+- 이 문서는 구현 로드맵이 아니라 서비스 기능과 호출 계약의 기준서로 유지한다.
 - 코드 컨벤션 기준은 `dev_convention.md`를 따른다.

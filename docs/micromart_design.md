@@ -593,7 +593,13 @@ micro-mart/
   생성해 조합한다.
 - local overlay의 namespace는 `micro-mart-local`이다. base manifest에는 `micro-mart`가
   적혀 있지만 overlay가 최종 namespace를 덮어쓴다.
+- local overlay는 `172.25.46.10:32000/<service-name>:local` 이미지 주소를 사용한다.
+  이미지 registry나 태그를 바꾸면 overlay의 `images` 설정도 함께 바꾼다.
 - 각 애플리케이션 Deployment는 `/health`를 liveness/readiness probe로 사용한다.
+- 애플리케이션 컨테이너는 non-root UID/GID `10001`로 실행하고,
+  `readOnlyRootFilesystem`, privilege escalation 금지, capability drop,
+  `seccompProfile: RuntimeDefault`를 기본 보안 기준으로 둔다. 런타임 쓰기 경로는 `/tmp`
+  `emptyDir`처럼 명시적 volume으로 제공한다.
 - 애플리케이션 컨테이너 리소스는 임시 기준으로 `requests.cpu=50m`,
   `requests.memory=128Mi`, `limits.memory=256Mi`를 둔다. CPU limit은 k6 부하 테스트로
   실제 사용량을 확인한 뒤 결정한다.
@@ -601,7 +607,8 @@ micro-mart/
   `userdb`만 기본 생성하므로 `productdb`, `orderdb`, `paymentdb`는 별도 psql 작업으로
   생성한다.
 - Redis와 NATS는 로컬 단일 인스턴스 manifest(`k8s/db/redis.yaml`, `k8s/nats/nats.yaml`)로
-  `micro-mart` namespace에 배포한다.
+  `micro-mart` namespace에 배포한다. Redis는 `redis:8.6.3`과 PVC `128Mi`를 사용하고,
+  NATS는 `nats:2.14.0`에서 JetStream을 켠 뒤 `/tmp/nats`에 PVC `1Gi`를 연결한다.
 - OTel Collector는 `micro-mart` namespace에 Helm으로 배포하고, Prometheus, Grafana, Loki,
   Tempo는 `monitoring` namespace에 Helm values 파일로 배포한다.
 
