@@ -32,6 +32,18 @@ spec:
             - containerPort: 4222
             - containerPort: 8222
           args: ["-js", "-m", "8222"]
+          volumeMounts:
+            - name: data
+              mountPath: /tmp
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 1Gi
 ---
 apiVersion: v1
 kind: Service
