@@ -55,6 +55,39 @@ cp k8s/services/overlays/local/secrets/nats-secrets.env.example k8s/services/ove
 cp k8s/services/overlays/local/secrets/internal-service-token-secret.env.example k8s/services/overlays/local/secrets/internal-service-token-secret.env
 ```
 
+### micro-mart 서비스 이미지 빌드 및 registry push
+
+Kubernetes가 사용할 micro-mart 서비스 이미지를 로컬에서 빌드한 뒤, 로컬 registry에 push합니다.
+
+현재 local overlay는 아래 registry 주소와 `local` 태그를 사용합니다.
+
+```text
+172.25.46.10:32000/<service-name>:local
+```
+
+repository root 기준:
+
+```bash
+REGISTRY=172.25.46.10:32000
+TAG=local
+
+docker build -f services/user-service/Dockerfile -t ${REGISTRY}/user-service:${TAG} .
+docker build -f services/product-service/Dockerfile -t ${REGISTRY}/product-service:${TAG} .
+docker build -f services/order-service/Dockerfile -t ${REGISTRY}/order-service:${TAG} .
+docker build -f services/payment-service/Dockerfile -t ${REGISTRY}/payment-service:${TAG} .
+docker build -f services/notification-service/Dockerfile -t ${REGISTRY}/notification-service:${TAG} .
+docker build -f services/api-gateway/Dockerfile -t ${REGISTRY}/api-gateway:${TAG} .
+
+docker push ${REGISTRY}/user-service:${TAG}
+docker push ${REGISTRY}/product-service:${TAG}
+docker push ${REGISTRY}/order-service:${TAG}
+docker push ${REGISTRY}/payment-service:${TAG}
+docker push ${REGISTRY}/notification-service:${TAG}
+docker push ${REGISTRY}/api-gateway:${TAG}
+```
+
+이미지 주소 또는 태그를 변경한 경우 k8s/services/overlays/local/kustomization.yaml의 images 설정도 같은 값으로 변경해야 합니다.
+
 ### Kustomize 실행
 
 repository root 기준:

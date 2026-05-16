@@ -56,14 +56,14 @@ helm upgrade prometheus prometheus-community/prometheus -n monitoring -f prometh
 helm repo add grafana-community https://grafana-community.github.io/helm-charts
 ```
 
-admin 계정 비밀번호 설정에 대해서 `adminPassword="admin"` 부분 수정
+admin 계정 비밀번호 설정에 대해서 `adminPassword="CHANGE_ME_PASSWORD"` 부분 수정
 
 ```bash
-helm install grafana grafana-community/grafana -n monitoring -f grafana-values.yaml --set adminPassword="admin"
+helm install grafana grafana-community/grafana -n monitoring -f grafana-values.yaml --set adminPassword="CHANGE_ME_PASSWORD"
 ```
 
 ```bash
-helm upgrade grafana grafana-community/grafana -n monitoring -f grafana-values.yaml --set adminPassword="admin"
+helm upgrade grafana grafana-community/grafana -n monitoring -f grafana-values.yaml --set adminPassword="CHANGE_ME_PASSWORD"
 ```
 
 ## Loki

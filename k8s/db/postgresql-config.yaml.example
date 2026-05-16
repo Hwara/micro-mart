@@ -1,5 +1,5 @@
 # 실제 환경에서 수정할 것
 auth:
-  postgresPassword: "micromart"
-  password: "micromart"
+  postgresPassword: "CHANGE_ME_POSTGRES_PASSWORD"
+  password: "CHANGE_ME_APP_PASSWORD"
   database: "userdb"
