@@ -76,3 +76,25 @@ helm install loki grafana-community/loki -n monitoring -f loki-values.yaml
 ```bash
 helm upgrade loki grafana-community/loki -n monitoring -f loki-values.yaml
 ```
+
+## Tempo
+
+<https://github.com/grafana/tempo/tree/main/example/helm> 참조
+
+repo는 Grafana와 같음
+
+```bash
+helm repo add grafana-community https://grafana-community.github.io/helm-charts
+```
+
+설치
+
+```bash
+helm install tempo grafana-community/tempo -n monitoring -f tempo-values.yaml
+```
+
+업그레이드
+
+```bash
+helm upgrade tempo grafana-community/tempo -n monitoring -f tempo-values.yaml
+```

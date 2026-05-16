@@ -48,7 +48,7 @@ config:
   exporters:
     # 트레이싱 → Tempo (OTLP로 직접 전달)
     otlp/tempo:
-      endpoint: tempo:4317
+      endpoint: tempo.monitoring.svc.cluster.local:4317
       tls:
         insecure: true
 
