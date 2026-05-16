@@ -13,6 +13,7 @@
 현재 db가 기본으로 생성되지 않기 때문에 psql을 이용해 직접 DB에 접근하여 다음의 명령을 실행해주어야 함
 
 ```sql
+-- userdb는 이미 있으면 생략
 CREATE DATABASE userdb;
 CREATE DATABASE productdb;
 CREATE DATABASE orderdb;

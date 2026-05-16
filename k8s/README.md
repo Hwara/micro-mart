@@ -44,8 +44,8 @@ cp k8s/services/overlays/local/secrets/user-database-secret.env.example k8s/serv
 cp k8s/services/overlays/local/secrets/product-database-secret.env.example k8s/services/overlays/local/secrets/product-database-secret.env
 cp k8s/services/overlays/local/secrets/order-database-secret.env.example k8s/services/overlays/local/secrets/order-database-secret.env
 cp k8s/services/overlays/local/secrets/payment-database-secret.env.example k8s/services/overlays/local/secrets/payment-database-secret.env
-cp k8s/services/overlays/local/secrets/redis-secret.env.example k8s/services/overlays/local/secrets/redis-secret.env
-cp k8s/services/overlays/local/secrets/nats-secret.env.example k8s/services/overlays/local/secrets/nats-secret.env
+cp k8s/services/overlays/local/secrets/redis-secrets.env.example k8s/services/overlays/local/secrets/redis-secrets.env
+cp k8s/services/overlays/local/secrets/nats-secrets.env.example k8s/services/overlays/local/secrets/nats-secrets.env
 cp k8s/services/overlays/local/secrets/internal-service-token-secret.env.example k8s/services/overlays/local/secrets/internal-service-token-secret.env
 ```
 
