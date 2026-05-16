@@ -31,6 +31,24 @@ cp keys/public.pem k8s/services/overlays/local/secrets/keys/public.pem
 cp keys/private.pem k8s/services/overlays/local/secrets/keys/private.pem
 ```
 
+### 각 서비스별 필요 Secret 준비
+
+각 서비스에 대해 필요한 Secret에 대한 example이 `secrets/`에 포함되어 있습니다.
+
+`.example`을 제거하여 복사 후 현재 환경에 맞게 설정을 변경하세요.
+
+repository root 기준:
+
+```bash
+cp k8s/services/overlays/local/secrets/user-database-secret.env.example k8s/services/overlays/local/secrets/user-database-secret.env
+cp k8s/services/overlays/local/secrets/product-database-secret.env.example k8s/services/overlays/local/secrets/product-database-secret.env
+cp k8s/services/overlays/local/secrets/order-database-secret.env.example k8s/services/overlays/local/secrets/order-database-secret.env
+cp k8s/services/overlays/local/secrets/payment-database-secret.env.example k8s/services/overlays/local/secrets/payment-database-secret.env
+cp k8s/services/overlays/local/secrets/redis-secret.env.example k8s/services/overlays/local/secrets/redis-secret.env
+cp k8s/services/overlays/local/secrets/nats-secret.env.example k8s/services/overlays/local/secrets/nats-secret.env
+cp k8s/services/overlays/local/secrets/internal-service-token-secret.env.example k8s/services/overlays/local/secrets/internal-service-token-secret.env
+```
+
 ### Kustomize 실행
 
 repository root 기준:

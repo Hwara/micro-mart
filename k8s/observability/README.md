@@ -1,5 +1,13 @@
 # 관찰성 스택 배포
 
+## namespace 생성
+
+```bash
+kubectl create namespace monitoring
+```
+
+또는 `helm install` 실행할 때 `--create-namespace` 추가
+
 ## OTel Collector
 
 ```bash

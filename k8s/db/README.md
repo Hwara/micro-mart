@@ -10,6 +10,17 @@
 > 주의 : default storageclass를 생성해두어야 자동 생성되는 PVC가 PV를 생성
 > storageclass 가 따로 없다면 직접 PV 생성 및 설정 필요
 
+현재 db가 기본으로 생성되지 않기 때문에 psql을 이용해 직접 DB에 접근하여 다음의 명령을 실행해주어야 함
+
+```sql
+CREATE DATABASE userdb;
+CREATE DATABASE productdb;
+CREATE DATABASE orderdb;
+CREATE DATABASE paymentdb;
+```
+
+-> 추후 Alembic을 적용하여 DB migration을 적용할 예정
+
 # Redis 구축
 
 ## 1. helm으로 구축
