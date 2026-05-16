@@ -17,7 +17,7 @@ spec:
         app: product-service
     spec:
       containers:
-        - image: 172.25.46.10:32000/product-service
+        - image: product-service
           name: product-service
           envFrom:
             - configMapRef:

@@ -4,6 +4,26 @@ resources:
 
 namespace: micro-mart-local
 
+images:
+  - name: user-service
+    newName: 172.25.46.10:32000/user-service
+    newTag: local
+  - name: product-service
+    newName: 172.25.46.10:32000/product-service
+    newTag: local
+  - name: order-service
+    newName: 172.25.46.10:32000/order-service
+    newTag: local
+  - name: payment-service
+    newName: 172.25.46.10:32000/payment-service
+    newTag: local
+  - name: notification-service
+    newName: 172.25.46.10:32000/notification-service
+    newTag: local
+  - name: api-gateway
+    newName: 172.25.46.10:32000/api-gateway
+    newTag: local
+
 configMapGenerator:
   - name: user-service-config
     envs:

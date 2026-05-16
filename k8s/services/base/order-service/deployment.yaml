@@ -17,7 +17,7 @@ spec:
         app: order-service
     spec:
       containers:
-        - image: 172.25.46.10:32000/order-service
+        - image: order-service
           name: order-service
           envFrom:
             - configMapRef:
