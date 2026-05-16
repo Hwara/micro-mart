@@ -2,7 +2,9 @@
 
 > LGTM 관찰성 스택 학습용 이커머스 마이크로서비스 애플리케이션
 
-MicroMart는 Loki, Grafana, Tempo, Prometheus를 실제 서비스 간 연쇄 호출 위에서 학습하기 위한 백엔드 프로젝트입니다. 주문 생성 흐름에서 HTTP 호출, NATS 이벤트, Chaos Mode 장애 주입을 함께 다루며 로그, 메트릭, 트레이스를 연결해 문제를 진단하는 경험을 목표로 합니다.
+MicroMart는 Loki, Grafana, Tempo, Prometheus를 실제 서비스 간 연쇄 호출 위에서 학습하기 위한 백엔드 프로젝트입니다. 
+
+주문 생성 흐름에서 HTTP 호출, NATS 이벤트, Chaos Mode 장애 주입을 함께 다루며 로그, 메트릭, 트레이스를 연결해 문제를 진단하는 경험을 목표로 합니다.
 
 ## 프로젝트 개요
 
@@ -58,7 +60,7 @@ flowchart LR
 
 | 서비스 | 역할 | 로컬 포트 | 상태 |
 | --- | --- | --- | --- |
-| `api-gateway` | 외부 단일 진입점, JWT 검증, 라우팅, Rate Limiting | `8080` | 완료 |
+| `api-gateway` | 외부 단일 진입점, JWT 검증, 라우팅, Rate Limiting | `8000` | 완료 |
 | `user-service` | 회원가입, 로그인, JWT 발급, Refresh Token 관리 | `8001` | 완료 |
 | `product-service` | 상품 CRUD, Redis 캐시, 재고 차감/복구 | `8002` | 완료 |
 | `order-service` | 주문 생성/조회, Saga 오케스트레이션, NATS 이벤트 발행 | `8003` | 완료 |
