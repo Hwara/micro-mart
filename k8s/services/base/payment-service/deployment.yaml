@@ -43,6 +43,12 @@ spec:
               path: /health
               port: 8000
             periodSeconds: 10
-          resources: {}
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "128Mi"
+            limits:
+              # memory만 최소한으로 제한 걸어놓고 k6으로 부하테스트 이후 정확한 제한 값 산출
+              memory: "256Mi"
 
 status: {}
