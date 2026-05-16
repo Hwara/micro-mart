@@ -22,5 +22,15 @@ spec:
           envFrom:
             - configMapRef:
                 name: api-gateway-config
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            periodSeconds: 10
           resources: {}
 status: {}

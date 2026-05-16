@@ -37,6 +37,16 @@ spec:
             - name: jwt-keys
               readOnly: true
               mountPath: /etc/secrets
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            periodSeconds: 10
           resources: {}
       volumes:
         - name: jwt-keys
