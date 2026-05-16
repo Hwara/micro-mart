@@ -1,0 +1,107 @@
+global:
+  # -- configures cluster domain ("cluster.local" by default)
+  clusterDomain: "cluster.local"
+  # 기본은 "kube-dns"로 되어있어 에러가 발생하여 사용중인 coredns로 변경
+  dnsService: "coredns"
+  # -- configures DNS service namespace
+  dnsNamespace: "kube-system"
+
+loki:
+  # 로컬 개발: 인증 비활성화
+  auth_enabled: false
+
+  commonConfig:
+    replication_factor: 1
+
+  storage:
+    type: filesystem
+
+  schemaConfig:
+    configs:
+      - from: 2024-01-01
+        store: tsdb
+        object_store: filesystem
+        schema: v13
+        index:
+          prefix: index_
+          period: 24h
+
+  limits_config:
+    # otel-collector로 수집하는 경우 structured metadata 사용이 필요
+    allow_structured_metadata: true
+    volume_enabled: true
+
+  # Grafana의 Logs Drilldown, 패턴 분석 기능
+  pattern_ingester:
+    enabled: true
+
+  # Loki ruler나 alerting rule
+  ruler:
+    enable_api: true
+
+deploymentMode: Monolithic
+
+singleBinary:
+  replicas: 1
+  persistence:
+    enabled: true
+    size: 5Gi
+
+minio:
+  enabled: false
+
+lokiCanary:
+  enabled: true
+
+gateway:
+  enabled: true
+  service:
+    # 80:3100을 3100:3100으로 변경
+    port: 3100
+
+# 기본 메모리 request가 매우 커서 조회 성능이 중요하지 않은 로컬 환경의 경우 꺼도 상관없다고 함.
+chunksCache:
+  enabled: false
+
+resultsCache:
+  enabled: false
+
+# 다른 배포 모드 컴포넌트는 명시적으로 비활성화
+backend:
+  replicas: 0
+
+read:
+  replicas: 0
+
+write:
+  replicas: 0
+
+ingester:
+  replicas: 0
+
+querier:
+  replicas: 0
+
+queryFrontend:
+  replicas: 0
+
+queryScheduler:
+  replicas: 0
+
+distributor:
+  replicas: 0
+
+compactor:
+  replicas: 0
+
+indexGateway:
+  replicas: 0
+
+bloomPlanner:
+  replicas: 0
+
+bloomBuilder:
+  replicas: 0
+
+bloomGateway:
+  replicas: 0

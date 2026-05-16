@@ -1,0 +1,78 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: user-service
+  name: user-service
+  namespace: micro-mart
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: user-service
+  strategy: {}
+  template:
+    metadata:
+      labels:
+        app: user-service
+    spec:
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - image: user-service
+          name: user-service
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 10001
+            runAsGroup: 10001
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          envFrom:
+            - configMapRef:
+                name: user-service-config
+            - secretRef:
+                name: user-database-secrets
+            - secretRef:
+                name: redis-secrets
+          # 하나씩 가져오는 예제
+          # env:
+          #   - name: DATABASE_URL
+          #     valueFrom:
+          #       secretKeyRef:
+          #         name: database-secrets
+          #         key: DATABASE_URL
+          volumeMounts:
+            - name: jwt-keys
+              readOnly: true
+              mountPath: /etc/secrets
+            - name: tmp
+              mountPath: /tmp
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "128Mi"
+            limits:
+              # memory만 최소한으로 제한 걸어놓고 k6으로 부하테스트 이후 정확한 제한 값 산출
+              memory: "256Mi"
+      volumes:
+        - name: jwt-keys
+          secret:
+            secretName: jwt-keys
+        - name: tmp
+          emptyDir: {}
+
+status: {}

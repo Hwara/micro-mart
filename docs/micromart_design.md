@@ -348,6 +348,14 @@ user:{id}:token_version → 버전 번호
 # 로깅: structlog JSON → OTel LogRecord → OTel Collector → Loki
 ```
 
+### Kubernetes 관찰성 배포 흐름
+
+Kubernetes 로컬 환경에서는 애플리케이션 서비스가 OTLP gRPC(`4317`)로
+`otel-collector.micro-mart.svc.cluster.local`에 trace, metric, log를 전송한다.
+OTel Collector는 Helm values 설정에 따라 trace는 Tempo, metric은 Prometheus Remote Write,
+log는 Loki OTLP endpoint로 전달한다. Grafana는 Prometheus, Loki, Tempo datasource를
+프로비저닝하여 메트릭, 로그, 트레이스를 한 화면에서 조회한다.
+
 ### Loki 로그 필드
 
 ```json
@@ -517,6 +525,38 @@ micro-mart/
 │   ├── observability.yaml
 │   ├── services.yaml
 │   └── .env.example
+├── k8s/
+│   ├── README.md
+│   ├── db/
+│   │   ├── README.md
+│   │   ├── postgresql-config.yaml.example
+│   │   └── redis.yaml
+│   ├── namespaces/
+│   │   └── namespace.yaml
+│   ├── nats/
+│   │   └── nats.yaml
+│   ├── observability/
+│   │   ├── README.md
+│   │   ├── grafana-values.yaml
+│   │   ├── loki-values.yaml
+│   │   ├── otel-collector-values.yaml
+│   │   ├── prometheus-values.yaml
+│   │   └── tempo-values.yaml
+│   └── services/
+│       ├── base/
+│       │   ├── api-gateway/
+│       │   ├── user-service/
+│       │   ├── product-service/
+│       │   ├── order-service/
+│       │   ├── payment-service/
+│       │   ├── notification-service/
+│       │   └── kustomization.yaml
+│       └── overlays/
+│           └── local/
+│               ├── config/
+│               ├── secrets/
+│               ├── namespace.yaml
+│               └── kustomization.yaml
 ├── docs/
 │   ├── dev_convention.md
 │   ├── service_function_definition.md
@@ -544,7 +584,30 @@ micro-mart/
 
 ---
 
-## 9. 구현 순서
+## 9. Kubernetes 배포 구성
+
+로컬 Kubernetes 배포는 애플리케이션, 인프라, 관찰성 스택을 분리해 관리한다.
+
+- 애플리케이션 서비스 6개는 `k8s/services/base/<service>/`에 `Deployment`, `Service`,
+  `kustomization.yaml`을 두고, `k8s/services/overlays/local/`에서 ConfigMap과 Secret을
+  생성해 조합한다.
+- local overlay의 namespace는 `micro-mart-local`이다. base manifest에는 `micro-mart`가
+  적혀 있지만 overlay가 최종 namespace를 덮어쓴다.
+- 각 애플리케이션 Deployment는 `/health`를 liveness/readiness probe로 사용한다.
+- 애플리케이션 컨테이너 리소스는 임시 기준으로 `requests.cpu=50m`,
+  `requests.memory=128Mi`, `limits.memory=256Mi`를 둔다. CPU limit은 k6 부하 테스트로
+  실제 사용량을 확인한 뒤 결정한다.
+- PostgreSQL은 Bitnami Helm chart로 `micro-mart` namespace에 배포한다. chart 설정은
+  `userdb`만 기본 생성하므로 `productdb`, `orderdb`, `paymentdb`는 별도 psql 작업으로
+  생성한다.
+- Redis와 NATS는 로컬 단일 인스턴스 manifest(`k8s/db/redis.yaml`, `k8s/nats/nats.yaml`)로
+  `micro-mart` namespace에 배포한다.
+- OTel Collector는 `micro-mart` namespace에 Helm으로 배포하고, Prometheus, Grafana, Loki,
+  Tempo는 `monitoring` namespace에 Helm values 파일로 배포한다.
+
+---
+
+## 10. 구현 순서
 
 1. ✅ **공통 기반** — `shared/telemetry/`, structlog JSON 설정
 2. ✅ **user-service** — JWT 발급, Refresh Token Rotation, token_version 관리
@@ -554,12 +617,12 @@ micro-mart/
 6. ✅ **api-gateway** — JWT 검증 미들웨어(JWKS 캐시), 리버스 프록시, Rate Limiting, 관찰성 메트릭
 7. ✅ **로컬 통합 Compose** — infra/observability/services 분리 구성
 8. ✅ **notification-service** — NATS 소비, 알림 발송 시뮬레이션, 관찰성 메트릭
-9. ⏳ **Kubernetes 매니페스트** — Deployment, Service, ConfigMap, Secret
+9. ✅ **Kubernetes 매니페스트** — Deployment, Service, ConfigMap, Secret, local Kustomize overlay
 10. ⏳ **k6 부하 스크립트** — 시나리오별 부하 생성
 
 ---
 
-## 10. 참조 문서
+## 11. 참조 문서
 
 | 문서 | 역할 |
 | -------------------------------- | ---------------------------- |

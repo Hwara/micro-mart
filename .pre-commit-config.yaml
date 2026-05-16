@@ -3,7 +3,7 @@ repos:
     rev: v0.4.4
     hooks:
       - id: ruff
-        args: [--fix]   # 자동 수정 가능한 것은 자동으로 수정
+        args: [--fix] # 자동 수정 가능한 것은 자동으로 수정
 
   - repo: https://github.com/psf/black
     rev: 24.4.2
@@ -17,15 +17,16 @@ repos:
       - id: mypy
         name: mypy (api-gateway)
         additional_dependencies: [pydantic, fastapi]
-        pass_filenames: false                          # ← 핵심: 파일 목록을 직접 넘기지 않음
+        pass_filenames: false # ← 핵심: 파일 목록을 직접 넘기지 않음
         args: ["--config-file=pyproject.toml", "services/api-gateway/app"]
         files: ^services/api-gateway/
 
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.6.0
     hooks:
-      - id: trailing-whitespace    # 줄 끝 공백 제거
-      - id: end-of-file-fixer      # 파일 끝 개행 확인
-      - id: check-yaml             # YAML 문법 검사
-      - id: check-added-large-files  # 대용량 파일 실수 커밋 방지
-      - id: detect-private-key     # 개인키 커밋 방지
+      - id: trailing-whitespace # 줄 끝 공백 제거
+      - id: end-of-file-fixer # 파일 끝 개행 확인
+      - id: check-yaml # YAML 문법 검사
+        args: [--allow-multiple-documents]
+      - id: check-added-large-files # 대용량 파일 실수 커밋 방지
+      - id: detect-private-key # 개인키 커밋 방지

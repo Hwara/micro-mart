@@ -1,0 +1,74 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: product-service
+  name: product-service
+  namespace: micro-mart
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: product-service
+  strategy: {}
+  template:
+    metadata:
+      labels:
+        app: product-service
+    spec:
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - image: product-service
+          name: product-service
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 10001
+            runAsGroup: 10001
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+          envFrom:
+            - configMapRef:
+                name: product-service-config
+            - secretRef:
+                name: product-database-secrets
+            - secretRef:
+                name: redis-secrets
+            - secretRef:
+                name: internal-service-token-secrets
+          # 하나씩 가져오는 예제
+          # env:
+          #   - name: DATABASE_URL
+          #     valueFrom:
+          #       secretKeyRef:
+          #         name: database-secrets
+          #         key: DATABASE_URL
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "128Mi"
+            limits:
+              # memory만 최소한으로 제한 걸어놓고 k6으로 부하테스트 이후 정확한 제한 값 산출
+              memory: "256Mi"
+      volumes:
+        - name: tmp
+          emptyDir: {}
+
+status: {}

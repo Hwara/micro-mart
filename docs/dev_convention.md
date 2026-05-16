@@ -471,7 +471,7 @@ headers = {
 
 ---
 
-## 20. Docker / 로컬 실행 규칙
+## 20. Docker Compose / Kubernetes 로컬 실행 규칙
 
 - 서비스 Dockerfile은 레포 루트를 build context로 전제한다.
 - Dockerfile은 `requirements/`와 `shared/telemetry/requirements.txt`를 먼저 복사한 뒤 서비스별 `requirements.txt`를 설치한다.
@@ -481,6 +481,56 @@ headers = {
   - `docker/observability.yaml`: OTel Collector, Prometheus, Loki, Tempo, Grafana
   - `docker/services.yaml`: 애플리케이션 서비스
 - 헬스체크는 런타임 이미지에 curl/wget을 추가하지 않기 위해 Python stdlib `urllib.request` 사용을 기본으로 한다.
+
+### Kubernetes manifest 규칙
+
+- Kubernetes 애플리케이션 서비스는 `k8s/services/base/<service-name>/` 아래에
+  `deployment.yaml`, `service.yaml`, `kustomization.yaml`을 둔다.
+- 로컬 Kubernetes 실행은 `k8s/services/overlays/local/` overlay를 사용한다.
+  이 overlay는 서비스별 ConfigMap, Secret, JWT key Secret, local namespace를 생성한다.
+- 각 애플리케이션 Deployment는 `/health`를 `livenessProbe`와 `readinessProbe`로 사용한다.
+  `/health`는 인증 없이 호출 가능해야 하며, probe 때문에 비즈니스 상태가 변경되면 안 된다.
+- 환경변수는 `envFrom.configMapRef`와 `envFrom.secretRef`로 주입한다. 민감값을
+  ConfigMap에 넣지 않는다.
+- 실제 Secret env 파일과 JWT key 파일은 Git에 커밋하지 않는다. Git에는
+  `k8s/services/overlays/local/secrets/*.env.example`과 안내 문서만 남기고,
+  로컬 실행자는 `.example`을 복사해 실제 값을 채운다.
+- `user-service`의 RS256 key는 `k8s/services/overlays/local/secrets/keys/` 아래에
+  `public.pem`, `private.pem`으로 복사한 뒤 Kustomize `secretGenerator`로 생성한다.
+- 앱 local overlay namespace는 `micro-mart-local`이다. PostgreSQL, Redis, NATS,
+  OTel Collector 같은 공용 인프라는 `micro-mart` namespace를 사용한다.
+  Prometheus, Grafana, Loki, Tempo는 `monitoring` namespace를 사용한다.
+
+### Kubernetes 리소스 정책
+
+- 애플리케이션 서비스의 초기 resource 기본값은 아래와 같이 둔다.
+
+```yaml
+resources:
+  requests:
+    cpu: "50m"
+    memory: "128Mi"
+  limits:
+    memory: "256Mi"
+```
+
+- CPU limit은 초기에는 설정하지 않는다. 낮은 CPU limit은 FastAPI 서비스의 정상 요청도
+  throttling하여 관찰성 실습 결과를 왜곡할 수 있으므로, k6 부하 테스트와 Grafana 지표를
+  확인한 뒤 결정한다.
+- Memory limit은 OOM kill 경계를 명확히 하기 위해 초기값을 둔다. 서비스별 실제 사용량이
+  확인되면 `requests`와 `limits`를 서비스별로 조정한다.
+
+### Kubernetes 인프라 / 관찰성 배포 규칙
+
+- PostgreSQL은 Bitnami Helm chart와 `k8s/db/postgresql-config.yaml.example`을 기준으로
+  배포한다. chart 기본 설정은 하나의 DB만 자동 생성하므로, 서비스별 DB는 psql 또는 향후
+  migration 절차로 생성한다.
+- Redis와 NATS는 로컬 학습 환경에서 단일 인스턴스 manifest를 사용할 수 있다.
+- OTel Collector는 `micro-mart` namespace에 배포하고, 애플리케이션 서비스는
+  `OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector.micro-mart.svc.cluster.local:4317`로
+  데이터를 전송한다.
+- Prometheus, Grafana, Loki, Tempo는 `monitoring` namespace에 Helm values 파일로 배포한다.
+  OTel Collector는 trace를 Tempo, metric을 Prometheus Remote Write, log를 Loki로 전달한다.
 
 ---
 

@@ -1,0 +1,9 @@
+server:
+  # 기존 service의 port가 80:9090으로 되어 있어 9090:9090으로 변경
+  service:
+    servicePort: 9090
+  extraArgs:
+    # 현재 otel-collector에서 remote 형식으로 metric을 쓰기 때문에 설정이 필요
+    web.enable-remote-write-receiver: null
+  # 기본 15일이나 로컬/디버깅 용이므로 7일로 유지
+  retention: "7d"

@@ -1,0 +1,62 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: nats
+  namespace: micro-mart
+spec:
+  selector:
+    matchLabels:
+      svc: nats
+  serviceName: nats
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        svc: nats
+    spec:
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: nats
+          image: nats:2.14.0
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 10001
+            runAsGroup: 10001
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          ports:
+            - containerPort: 4222
+            - containerPort: 8222
+          args: ["-js", "-m", "8222", "-sd", "/tmp/nats"]
+          volumeMounts:
+            - name: data
+              mountPath: /tmp/nats
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nats
+  namespace: micro-mart
+spec:
+  type: ClusterIP
+  selector:
+    svc: nats
+  ports:
+    - port: 4222
+      name: client
+    - port: 8222
+      name: web-ui

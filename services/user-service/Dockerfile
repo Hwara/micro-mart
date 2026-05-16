@@ -47,8 +47,8 @@ COPY shared/ /app/shared/
 COPY services/user-service/app /app/app
 
 # non-root 유저: 컨테이너 탈출 시 호스트 권한 상승 방지
-RUN useradd -r -s /bin/false appuser && chown -R appuser /app
-USER appuser
+RUN useradd -r -u 10001 -s /bin/false appuser && chown -R 10001:10001 /app
+USER 10001:10001
 
 EXPOSE 8000
 

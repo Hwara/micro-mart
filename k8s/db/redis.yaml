@@ -1,0 +1,63 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: redis
+  namespace: micro-mart
+spec:
+  selector:
+    matchLabels:
+      svc: redis
+  serviceName: redis
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        svc: redis
+    spec:
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+        fsGroup: 999
+      containers:
+        - name: redis
+          image: redis:8.6.3
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 999
+            runAsGroup: 999
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          ports:
+            - containerPort: 6379
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 128Mi
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  namespace: micro-mart
+spec:
+  type: ClusterIP
+  selector:
+    svc: redis
+  ports:
+    - port: 6379
