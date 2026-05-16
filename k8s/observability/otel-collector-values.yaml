@@ -1,6 +1,14 @@
 # 관련 워크로드 생성 시 이름
 fullnameOverride: "otel-collector"
 
+# deployment(default), daemonset, statefulset 중 선택
+mode: "deployment"
+
+# contrib 버전 사용: loki exporter, prometheusremotewrite exporter 포함
+image:
+  repository: "otel/opentelemetry-collector-contrib"
+  tag: "0.150.1"
+
 # OTel Collector 파이프라인 설정
 # receivers → processors → exporters 순으로 데이터가 흐릅니다.
 config:
@@ -48,7 +56,7 @@ config:
     # Prometheus가 서비스를 scrape하는 대신,
     # Collector가 Prometheus로 push → 서비스마다 scrape 설정 불필요
     prometheusremotewrite:
-      endpoint: http://prometheus:9090/api/v1/write
+      endpoint: http://prometheus-server.monitoring.svc.cluster.local:9090/api/v1/write
       tls:
         insecure_skip_verify: true
 
