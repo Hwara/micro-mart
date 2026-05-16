@@ -34,6 +34,11 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /data
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
   volumeClaimTemplates:
     - metadata:
         name: data
@@ -43,6 +48,7 @@ spec:
         resources:
           requests:
             storage: 128Mi
+
 ---
 apiVersion: v1
 kind: Service

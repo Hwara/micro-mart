@@ -27,6 +27,7 @@ spec:
             runAsUser: 10001
             runAsGroup: 10001
             allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
             capabilities:
               drop:
                 - ALL
@@ -48,6 +49,8 @@ spec:
             - name: jwt-keys
               readOnly: true
               mountPath: /etc/secrets
+            - name: tmp
+              mountPath: /tmp
           livenessProbe:
             httpGet:
               path: /health
@@ -69,5 +72,7 @@ spec:
         - name: jwt-keys
           secret:
             secretName: jwt-keys
+        - name: tmp
+          emptyDir: {}
 
 status: {}

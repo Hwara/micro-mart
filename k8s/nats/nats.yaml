@@ -25,16 +25,17 @@ spec:
             runAsUser: 10001
             runAsGroup: 10001
             allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
             capabilities:
               drop:
                 - ALL
           ports:
             - containerPort: 4222
             - containerPort: 8222
-          args: ["-js", "-m", "8222"]
+          args: ["-js", "-m", "8222", "-sd", "/tmp/nats"]
           volumeMounts:
             - name: data
-              mountPath: /tmp
+              mountPath: /tmp/nats
   volumeClaimTemplates:
     - metadata:
         name: data

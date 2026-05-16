@@ -27,9 +27,13 @@ spec:
             runAsUser: 10001
             runAsGroup: 10001
             allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
             capabilities:
               drop:
                 - ALL
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
           envFrom:
             - configMapRef:
                 name: api-gateway-config
@@ -50,4 +54,7 @@ spec:
             limits:
               # memory만 최소한으로 제한 걸어놓고 k6으로 부하테스트 이후 정확한 제한 값 산출
               memory: "256Mi"
+      volumes:
+        - name: tmp
+          emptyDir: {}
 status: {}
