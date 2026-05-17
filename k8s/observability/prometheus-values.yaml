@@ -7,3 +7,11 @@ server:
     web.enable-remote-write-receiver: null
   # 기본 15일이나 로컬/디버깅 용이므로 7일로 유지
   retention: "7d"
+  retentionSize: "1500MB"
+  persistentVolume:
+    size: 2Gi
+alertmanager:
+  enabled: true
+  persistentVolume:
+    enabled: true
+    size: 256Mi

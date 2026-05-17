@@ -22,6 +22,7 @@ datasources:
           matcherRegex: '"trace_id":"(\w+)"'
           name: TraceID
           url: "$${__value.raw}"
+      timeInterval: 60s # Prometheus scrape interval
 
   - name: Tempo
     type: tempo

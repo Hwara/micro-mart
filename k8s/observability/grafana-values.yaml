@@ -31,3 +31,26 @@ datasources:
             filterByTraceID: true
           lokiSearch:
             datasourceUid: loki
+
+persistence:
+  type: pvc
+  enabled: true
+  size: 1Gi
+
+dashboardProviders:
+  dashboardproviders.yaml:
+    apiVersion: 1
+    providers:
+      - name: "default"
+        orgId: 1
+        folder: ""
+        type: file
+        disableDeletion: false
+        editable: true
+        options:
+          path: /var/lib/grafana/dashboards/default
+
+dashboards:
+  default:
+    micromart-observability-overview:
+      file: dashboard/micromart-observability-overview.json

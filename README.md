@@ -2,7 +2,7 @@
 
 > LGTM 관찰성 스택 학습용 이커머스 마이크로서비스 애플리케이션
 
-MicroMart는 Loki, Grafana, Tempo, Prometheus를 실제 서비스 간 연쇄 호출 위에서 학습하기 위한 백엔드 프로젝트입니다. 
+MicroMart는 Loki, Grafana, Tempo, Prometheus를 실제 서비스 간 연쇄 호출 위에서 학습하기 위한 백엔드 프로젝트입니다.
 
 주문 생성 흐름에서 HTTP 호출, NATS 이벤트, Chaos Mode 장애 주입을 함께 다루며 로그, 메트릭, 트레이스를 연결해 문제를 진단하는 경험을 목표로 합니다.
 
@@ -131,4 +131,4 @@ micro-mart/
 | 로컬 통합 Compose | 완료 |
 | `notification-service` | 완료 |
 | Kubernetes 매니페스트 | 완료 |
-| k6 부하 스크립트 | 예정 |
+| k6 부하 스크립트 | 진행 중 |
