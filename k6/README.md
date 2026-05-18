@@ -105,3 +105,58 @@ Baseline 실행 중이나 실행 후에는 k6 출력과 아래 지표를 함께 
 - Loki: 로그에 `service`, `trace_id`, `span_id`, `event` 필드가 유지되는지 확인
 
 기대하는 baseline 결과는 낮은 error rate, 안정적인 p95 latency, 증가하는 `order_completed_total`, 그리고 비즈니스 실패 메트릭이 늘지 않는 상태입니다.
+
+## Stock Contention Run
+
+정상 baseline 이후에는 단일 상품에 동시 주문을 집중시켜 낙관적 잠금 경합을 관찰합니다.
+이 테스트는 재고 부족이 아니라 `VERSION_CONFLICT`와 재시도 비용을 보기 위한 시나리오이므로
+충분한 재고를 가진 전용 상품을 사용합니다.
+
+```bash
+cat k6/setup/seed-stock-contention.sql | kubectl -n micro-mart exec -i statefulset/postgresql -- psql -U postgres -d productdb
+```
+
+```bash
+k6 run -e BASE_URL=http://localhost:8080 k6/scenarios/stock_contention_order_flow.js
+```
+
+기본 profile은 다음과 같습니다.
+
+| Stage | Duration | Target |
+| --- | ---: | ---: |
+| Ramp up | 30s | 50 VUs |
+| Steady | 3m | 50 VUs |
+| Ramp down | 30s | 0 VUs |
+
+필요하면 profile 값을 환경변수로 조정할 수 있습니다.
+
+```bash
+k6 run \
+  -e BASE_URL=http://localhost:8080 \
+  -e K6_CONTENTION_TARGET_VUS=20 \
+  -e K6_CONTENTION_RAMP_UP=10s \
+  -e K6_CONTENTION_STEADY=1m \
+  -e K6_CONTENTION_RAMP_DOWN=10s \
+  k6/scenarios/stock_contention_order_flow.js
+```
+
+특정 상품 ID를 직접 지정하려면 `PRODUCT_IDS`의 첫 번째 값을 사용합니다.
+
+```bash
+k6 run -e BASE_URL=http://localhost:8080 -e PRODUCT_IDS=123 k6/scenarios/stock_contention_order_flow.js
+```
+
+Stock contention 기준 threshold는 아래와 같습니다.
+
+- `http_req_failed < 2%`
+- `checks rate > 98%`
+- `order_create_contention p(95) < 1500ms`
+
+Grafana에서는 baseline 지표에 더해 아래 항목을 함께 확인합니다.
+
+- Prometheus: `product_stock_conflict_total`
+- Prometheus: `product_stock_deduct_total`
+- Prometheus: `order_completed_total`
+- Prometheus: `order_failed_total`
+- Prometheus: `gateway_request_duration_ms`
+- Tempo: 일부 주문 trace에서 product 재조회와 재시도로 지연이 늘어나는지 확인

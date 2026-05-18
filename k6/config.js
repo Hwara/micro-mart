@@ -19,6 +19,7 @@ function parsePositiveInteger(value, fallback) {
 }
 
 const TARGET_VUS = parsePositiveInteger(__ENV.K6_TARGET_VUS, 20);
+const CONTENTION_TARGET_VUS = parsePositiveInteger(__ENV.K6_CONTENTION_TARGET_VUS, 50);
 
 export const SMOKE_OPTIONS = {
   vus: 1,
@@ -41,6 +42,19 @@ export const BASELINE_OPTIONS = {
     http_req_failed: ["rate<0.01"],
     http_req_duration: ["p(95)<1000"],
     "http_req_duration{endpoint:order_create}": ["p(95)<1000"],
+  },
+};
+
+export const STOCK_CONTENTION_OPTIONS = {
+  stages: [
+    { duration: __ENV.K6_CONTENTION_RAMP_UP || "30s", target: CONTENTION_TARGET_VUS },
+    { duration: __ENV.K6_CONTENTION_STEADY || "3m", target: CONTENTION_TARGET_VUS },
+    { duration: __ENV.K6_CONTENTION_RAMP_DOWN || "30s", target: 0 },
+  ],
+  thresholds: {
+    checks: ["rate>0.98"],
+    http_req_failed: ["rate<0.02"],
+    "http_req_duration{endpoint:order_create_contention}": ["p(95)<1500"],
   },
 };
 

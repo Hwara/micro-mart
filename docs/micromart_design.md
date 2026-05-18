@@ -382,7 +382,7 @@ log는 Loki OTLP endpoint로 전달한다. Grafana는 Prometheus, Loki, Tempo da
 | 결제 서비스 간헐적 실패 | `CHAOS_FAILURE_RATE=0.5` | Tempo 에러 트레이스 + Loki 에러 로그 |
 | 결제 서비스 지연 | `CHAOS_LATENCY_MS=3000` | Grafana P99 급등 + 알럿 발동 |
 | 재고 부족 | 상품 재고 소진 | order-service 비즈니스 에러 메트릭 |
-| 낙관적 잠금 충돌 | 동시 주문 요청 | `product_stock_conflict_total` 메트릭 급등 |
+| 낙관적 잠금 충돌 | `k6/scenarios/stock_contention_order_flow.js`로 단일 상품에 동시 주문 요청 | `product_stock_conflict_total` 메트릭 급등 |
 | DB 커넥션 풀 고갈 | product-service 부하 증가 | DB pool 메트릭 + 연쇄 에러 트레이스 |
 | 알림 소비 지연 | `NOTIFICATION_SEND_DELAY_MS` 증가 | `notification_processing_latency_ms`, `notification_send_latency_ms` 상승 |
 | 알림 발송 실패 | `NOTIFICATION_FAILURE_RATE` 증가 | `notification_send_failed_total{reason="SIMULATED_SEND_FAILURE"}` 증가 + Loki warning 로그 |
@@ -625,7 +625,7 @@ micro-mart/
 7. ✅ **로컬 통합 Compose** — infra/observability/services 분리 구성
 8. ✅ **notification-service** — NATS 소비, 알림 발송 시뮬레이션, 관찰성 메트릭
 9. ✅ **Kubernetes 매니페스트** — Deployment, Service, ConfigMap, Secret, local Kustomize overlay
-10. ⏳ **k6 부하 스크립트** — 시나리오별 부하 생성
+10. ✅ **k6 부하 스크립트** — Kubernetes local baseline 주문 생성 부하 시나리오 추가
 
 ---
 
