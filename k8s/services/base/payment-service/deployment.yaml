@@ -4,7 +4,6 @@ metadata:
   labels:
     app: payment-service
   name: payment-service
-  namespace: micro-mart
 spec:
   replicas: 1
   selector:
@@ -21,6 +20,7 @@ spec:
           type: RuntimeDefault
       containers:
         - image: payment-service
+          imagePullPolicy: IfNotPresent
           name: payment-service
           securityContext:
             runAsNonRoot: true

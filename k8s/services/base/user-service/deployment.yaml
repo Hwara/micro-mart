@@ -4,7 +4,6 @@ metadata:
   labels:
     app: user-service
   name: user-service
-  namespace: micro-mart
 spec:
   replicas: 1
   selector:
@@ -21,6 +20,7 @@ spec:
           type: RuntimeDefault
       containers:
         - image: user-service
+          imagePullPolicy: IfNotPresent
           name: user-service
           securityContext:
             runAsNonRoot: true

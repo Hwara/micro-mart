@@ -4,7 +4,6 @@ metadata:
   labels:
     app: order-service
   name: order-service
-  namespace: micro-mart
 spec:
   ports:
     - port: 8000

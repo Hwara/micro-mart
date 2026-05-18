@@ -4,7 +4,6 @@ metadata:
   labels:
     app: product-service
   name: product-service
-  namespace: micro-mart
 spec:
   ports:
     - port: 8000

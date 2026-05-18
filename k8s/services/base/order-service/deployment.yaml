@@ -4,7 +4,6 @@ metadata:
   labels:
     app: order-service
   name: order-service
-  namespace: micro-mart
 spec:
   replicas: 1
   selector:
@@ -21,6 +20,7 @@ spec:
           type: RuntimeDefault
       containers:
         - image: order-service
+          imagePullPolicy: IfNotPresent
           name: order-service
           securityContext:
             runAsNonRoot: true

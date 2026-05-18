@@ -4,7 +4,6 @@ metadata:
   labels:
     app: notification-service
   name: notification-service
-  namespace: micro-mart
 spec:
   replicas: 1
   selector:
@@ -21,6 +20,7 @@ spec:
           type: RuntimeDefault
       containers:
         - image: notification-service
+          imagePullPolicy: IfNotPresent
           name: notification-service
           securityContext:
             runAsNonRoot: true

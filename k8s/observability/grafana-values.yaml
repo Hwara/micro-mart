@@ -1,3 +1,14 @@
+# Example: Schedule Grafana only on nodes with the label "purpose=monitoring"
+affinity:
+  nodeAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: purpose
+              operator: In
+              values:
+                - monitoring
+
 datasources:
   datasources.yaml:
     apiVersion: 1
@@ -8,6 +19,8 @@ datasources:
         url: http://prometheus-server.monitoring.svc.cluster.local:9090
         isDefault: true
         editable: true
+        jsonData:
+          timeInterval: 60s # Prometheus scrape interval
       - name: Loki
         type: loki
         uid: loki
@@ -31,3 +44,24 @@ datasources:
             filterByTraceID: true
           lokiSearch:
             datasourceUid: loki
+
+persistence:
+  type: pvc
+  enabled: true
+  size: 1Gi
+
+dashboardProviders:
+  dashboardproviders.yaml:
+    apiVersion: 1
+    providers:
+      - name: "default"
+        orgId: 1
+        folder: ""
+        type: file
+        disableDeletion: false
+        editable: true
+        options:
+          path: /var/lib/grafana/dashboards/default
+
+dashboardsConfigMaps:
+  default: micromart-observability-overview

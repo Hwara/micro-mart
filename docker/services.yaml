@@ -20,12 +20,12 @@ networks:
     external: true
 
 services:
-
   # ── user-service ────────────────────────────────────────
   user-service:
     build:
-      context: ..                              # 레포 루트 기준
+      context: .. # 레포 루트 기준
       dockerfile: services/user-service/Dockerfile
+    image: ${REGISTRY:-172.25.46.10:32000}/user-service:${TAG:-local}
     container_name: micromart-user-service
     env_file:
       - ../services/user-service/.env
@@ -36,20 +36,17 @@ services:
       - ../keys/public.pem:/run/secrets/public.pem:ro
     ports:
       - "8001:8000"
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      otel-collector:
-        condition: service_started
     healthcheck:
       # Python stdlib keeps healthchecks working without adding wget/curl to runtime images.
-      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=3).read()\" || exit 1"]
+      test:
+        [
+          "CMD-SHELL",
+          'python -c "import urllib.request; urllib.request.urlopen(''http://localhost:8000/health'', timeout=3).read()" || exit 1',
+        ]
       interval: 30s
       timeout: 5s
       retries: 3
-      start_period: 15s   # 앱 기동 시간 여유 (DB init_db 포함)
+      start_period: 15s # 앱 기동 시간 여유 (DB init_db 포함)
     restart: unless-stopped
 
   # ── product-service ─────────────────────────────────────
@@ -57,20 +54,18 @@ services:
     build:
       context: ..
       dockerfile: services/product-service/Dockerfile
+    image: ${REGISTRY:-172.25.46.10:32000}/product-service:${TAG:-local}
     container_name: micromart-product-service
     env_file:
       - ../services/product-service/.env
     ports:
       - "8002:8000"
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      otel-collector:
-        condition: service_started
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=3).read()\" || exit 1"]
+      test:
+        [
+          "CMD-SHELL",
+          'python -c "import urllib.request; urllib.request.urlopen(''http://localhost:8000/health'', timeout=3).read()" || exit 1',
+        ]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -82,20 +77,18 @@ services:
     build:
       context: ..
       dockerfile: services/order-service/Dockerfile
+    image: ${REGISTRY:-172.25.46.10:32000}/order-service:${TAG:-local}
     container_name: micromart-order-service
     env_file:
       - ../services/order-service/.env
     ports:
       - "8003:8000"
-    depends_on:
-      postgres:
-        condition: service_healthy
-      nats:
-        condition: service_healthy
-      otel-collector:
-        condition: service_started
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=3).read()\" || exit 1"]
+      test:
+        [
+          "CMD-SHELL",
+          'python -c "import urllib.request; urllib.request.urlopen(''http://localhost:8000/health'', timeout=3).read()" || exit 1',
+        ]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -107,18 +100,18 @@ services:
     build:
       context: ..
       dockerfile: services/payment-service/Dockerfile
+    image: ${REGISTRY:-172.25.46.10:32000}/payment-service:${TAG:-local}
     container_name: micromart-payment-service
     env_file:
       - ../services/payment-service/.env
     ports:
       - "8004:8000"
-    depends_on:
-      postgres:
-        condition: service_healthy
-      otel-collector:
-        condition: service_started
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=3).read()\" || exit 1"]
+      test:
+        [
+          "CMD-SHELL",
+          'python -c "import urllib.request; urllib.request.urlopen(''http://localhost:8000/health'', timeout=3).read()" || exit 1',
+        ]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -130,16 +123,16 @@ services:
     build:
       context: ..
       dockerfile: services/notification-service/Dockerfile
+    image: ${REGISTRY:-172.25.46.10:32000}/notification-service:${TAG:-local}
     container_name: micromart-notification-service
     env_file:
       - ../services/notification-service/.env
-    depends_on:
-      nats:
-        condition: service_healthy
-      otel-collector:
-        condition: service_started
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=3).read()\" || exit 1"]
+      test:
+        [
+          "CMD-SHELL",
+          'python -c "import urllib.request; urllib.request.urlopen(''http://localhost:8000/health'', timeout=3).read()" || exit 1',
+        ]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -152,16 +145,18 @@ services:
     build:
       context: ..
       dockerfile: services/api-gateway/Dockerfile
+    image: ${REGISTRY:-172.25.46.10:32000}/api-gateway:${TAG:-local}
     container_name: micromart-api-gateway
     env_file:
       - ../services/api-gateway/.env
     ports:
-      - "8080:8000"    # 외부 단일 진입점
-    depends_on:
-      otel-collector:
-        condition: service_started
+      - "8080:8000" # 외부 단일 진입점
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=3).read()\" || exit 1"]
+      test:
+        [
+          "CMD-SHELL",
+          'python -c "import urllib.request; urllib.request.urlopen(''http://localhost:8000/health'', timeout=3).read()" || exit 1',
+        ]
       interval: 30s
       timeout: 5s
       retries: 3

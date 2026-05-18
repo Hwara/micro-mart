@@ -4,7 +4,6 @@ metadata:
   labels:
     app: api-gateway
   name: api-gateway
-  namespace: micro-mart
 spec:
   replicas: 1
   selector:
@@ -21,6 +20,7 @@ spec:
           type: RuntimeDefault
       containers:
         - image: api-gateway
+          imagePullPolicy: IfNotPresent
           name: api-gateway
           securityContext:
             runAsNonRoot: true

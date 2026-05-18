@@ -24,6 +24,8 @@ class Settings(BaseSettings):
 
     # DB: infra.yaml의 productdb 연결
     database_url: str = "postgresql+asyncpg://micromart:micromart@localhost:5432/productdb"
+    db_pool_size: int = 5
+    db_max_overflow: int = 15
 
     # Redis: user-service와 동일 인스턴스, 다른 키 네임스페이스로 격리
     redis_url: str = "redis://localhost:6379/0"

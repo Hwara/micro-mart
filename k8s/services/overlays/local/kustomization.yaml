@@ -24,6 +24,9 @@ images:
     newName: 172.25.46.10:32000/api-gateway
     newTag: local
 
+patches:
+  - path: patches/image-pull-policy-always.yaml
+
 configMapGenerator:
   - name: user-service-config
     envs:

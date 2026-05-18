@@ -24,6 +24,8 @@ class Settings(BaseSettings):
 
     # DB: payment-db 독립 인스턴스
     database_url: str = "postgresql+asyncpg://micromart:micromart@localhost:5432/paymentdb"
+    db_pool_size: int = 5
+    db_max_overflow: int = 15
 
     # 내부 서비스 토큰 (order-service → payment-service 호출 인증)
     internal_service_token: str

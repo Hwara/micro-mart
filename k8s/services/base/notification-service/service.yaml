@@ -4,7 +4,6 @@ metadata:
   labels:
     app: notification-service
   name: notification-service
-  namespace: micro-mart
 spec:
   ports:
     - port: 8000
