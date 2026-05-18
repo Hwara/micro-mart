@@ -1,3 +1,14 @@
+# Example: Schedule Grafana only on nodes with the label "purpose=monitoring"
+affinity:
+  nodeAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: purpose
+              operator: In
+              values:
+                - monitoring
+
 datasources:
   datasources.yaml:
     apiVersion: 1
@@ -52,7 +63,5 @@ dashboardProviders:
         options:
           path: /var/lib/grafana/dashboards/default
 
-dashboards:
-  default:
-    micromart-observability-overview:
-      file: dashboard/micromart-observability-overview.json
+dashboardsConfigMaps:
+  default: micromart-observability-overview
