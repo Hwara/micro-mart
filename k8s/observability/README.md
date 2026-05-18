@@ -1,5 +1,7 @@
 # 관찰성 스택 배포
 
+명령어는 repository root 기준 실행
+
 ## namespace 생성
 
 ```bash
@@ -17,16 +19,10 @@ otel-collector는 `micro-mart` namespace에 배포 -> DB, Redis 등 인프라 na
 helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts
 ```
 
-설치
+설치/업그레이드
 
 ```bash
-helm install otel-collector open-telemetry/opentelemetry-collector -n micro-mart -f otel-collector-values.yaml
-```
-
-업그레이드
-
-```bash
-helm upgrade otel-collector open-telemetry/opentelemetry-collector -n micro-mart -f otel-collector-values.yaml
+helm upgrade otel-collector open-telemetry/opentelemetry-collector -n micro-mart -f k8s/observability/otel-collector-values.yaml
 ```
 
 ## Prometheus
@@ -38,16 +34,10 @@ helm repo add prometheus-community https://prometheus-community.github.io/helm-c
 helm repo update
 ```
 
-설치
+설치/업그레이드
 
 ```bash
-helm install prometheus prometheus-community/prometheus -n monitoring -f prometheus-values.yaml
-```
-
-업그레이드
-
-```bash
-helm upgrade prometheus prometheus-community/prometheus -n monitoring -f prometheus-values.yaml
+helm upgrade --install prometheus prometheus-community/prometheus -n monitoring -f k8s/observability/prometheus-values.yaml
 ```
 
 ## Grafana
@@ -56,14 +46,16 @@ helm upgrade prometheus prometheus-community/prometheus -n monitoring -f prometh
 helm repo add grafana-community https://grafana-community.github.io/helm-charts
 ```
 
+먼저 dashboard configmap 생성
+
+```bash
+kubectl create configmap micromart-observability-overview -n monitoring --from-file=micromart-observability-overview.json=k8s/observability/dashboard/micromart-observability-overview.json
+```
+
 admin 계정 비밀번호 설정에 대해서 `adminPassword="CHANGE_ME_PASSWORD"` 부분 수정
 
 ```bash
-helm install grafana grafana-community/grafana -n monitoring -f grafana-values.yaml --set adminPassword="CHANGE_ME_PASSWORD"
-```
-
-```bash
-helm upgrade grafana grafana-community/grafana -n monitoring -f grafana-values.yaml --set adminPassword="CHANGE_ME_PASSWORD"
+helm upgrade --install grafana grafana-community/grafana -n monitoring -f k8s/observability/grafana-values.yaml --set adminPassword="CHANGE_ME_PASSWORD"
 ```
 
 ## Loki
@@ -76,16 +68,10 @@ repo는 Grafana와 같음
 helm repo add grafana-community https://grafana-community.github.io/helm-charts
 ```
 
-설치
+설치/업그레이드
 
 ```bash
-helm install loki grafana-community/loki -n monitoring -f loki-values.yaml
-```
-
-업그레이드
-
-```bash
-helm upgrade loki grafana-community/loki -n monitoring -f loki-values.yaml
+helm upgrade --install loki grafana-community/loki -n monitoring -f k8s/observability/loki-values.yaml
 ```
 
 ## Tempo
@@ -98,14 +84,8 @@ repo는 Grafana와 같음
 helm repo add grafana-community https://grafana-community.github.io/helm-charts
 ```
 
-설치
+설치/업그레이드
 
 ```bash
-helm install tempo grafana-community/tempo -n monitoring -f tempo-values.yaml
-```
-
-업그레이드
-
-```bash
-helm upgrade tempo grafana-community/tempo -n monitoring -f tempo-values.yaml
+helm upgrade --install tempo grafana-community/tempo -n monitoring -f k8s/observability/tempo-values.yaml
 ```
