@@ -1,11 +1,26 @@
 import { check, fail, sleep } from "k6";
+import { Counter } from "k6/metrics";
 import http from "k6/http";
 
 import { AUTH_RATE_LIMIT_OPTIONS, BASE_URL, jsonParams } from "../config.js";
 
+const rateLimit429Counter = new Counter("rate_limit_429_total");
+
 http.setResponseCallback(http.expectedStatuses({ min: 200, max: 399 }, 401, 429));
 
-export const options = AUTH_RATE_LIMIT_OPTIONS;
+export const options = {
+  ...AUTH_RATE_LIMIT_OPTIONS,
+  thresholds: {
+    ...AUTH_RATE_LIMIT_OPTIONS.thresholds,
+    rate_limit_429_total: ["count>=1"],
+  },
+};
+
+function recordRateLimit(response, endpoint) {
+  if (response.status === 429) {
+    rateLimit429Counter.add(1, { endpoint });
+  }
+}
 
 /**
  * Parses a positive sleep duration in seconds and falls back to 0.1 seconds.
@@ -37,6 +52,7 @@ export function setup() {
     fail(`missing token setup check expected 401, got ${noToken.status}`);
   }
 
+
   const invalidToken = http.post(
     `${BASE_URL}/orders`,
     orderPayload,
@@ -64,6 +80,8 @@ export default function (data) {
     data.orderPayload,
     jsonParams({}, { endpoint: "auth_missing_token" }),
   );
+  recordRateLimit(noToken, "auth_missing_token");
+
   check(noToken, {
     "missing token is 401 or rate-limited": (res) => [401, 429].includes(res.status),
   });
@@ -76,6 +94,8 @@ export default function (data) {
       { endpoint: "auth_invalid_token" },
     ),
   );
+  recordRateLimit(invalidToken, "auth_invalid_token");
+
   check(invalidToken, {
     "invalid token is 401 or rate-limited": (res) => [401, 429].includes(res.status),
   });
@@ -84,6 +104,8 @@ export default function (data) {
     `${BASE_URL}/products?page=1&page_size=10&active_only=true`,
     jsonParams({}, { endpoint: "rate_limit_probe" }),
   );
+  recordRateLimit(productList, "rate_limit_probe");
+
   check(productList, {
     "rate-limit probe is 200 or 429": (res) => [200, 429].includes(res.status),
   });

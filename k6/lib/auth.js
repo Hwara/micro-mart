@@ -3,6 +3,8 @@ import http from "k6/http";
 
 import { jsonParams, TEST_USER_DEVICE, TEST_USER_EMAIL, TEST_USER_PASSWORD } from "../config.js";
 
+const AUTH_REGISTER_EXPECTED = http.expectedStatuses(201, 409);
+
 /**
  * Ensures the baseline user exists by POSTing registration data.
  *
@@ -16,8 +18,14 @@ export function registerBaselineUser(baseUrl) {
     password: TEST_USER_PASSWORD,
   });
 
-  const response = http.post(`${baseUrl}/auth/register`, payload, jsonParams({}, { endpoint: "auth_register" }));
-
+  const response = http.post(
+    `${baseUrl}/auth/register`,
+    payload,
+    {
+      ...jsonParams({}, { endpoint: "auth_register" }),
+      responseCallback: AUTH_REGISTER_EXPECTED,
+    },
+  );
   if (![201, 409].includes(response.status)) {
     fail(`baseline user registration failed: status=${response.status}`);
   }
