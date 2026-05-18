@@ -156,4 +156,4 @@ micro-mart/
 | 로컬 통합 Compose | 완료 |
 | `notification-service` | 완료 |
 | Kubernetes 매니페스트 | 완료 |
-| k6 부하 스크립트 | 진행 중 |
+| k6 부하 스크립트 | 완료 |
