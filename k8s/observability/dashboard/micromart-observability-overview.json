@@ -477,7 +477,7 @@
                         "type": "prometheus",
                         "uid": "prometheus"
                     },
-                    "expr": "histogram_quantile(0.95, sum by (le, path_group) (rate(gateway_request_duration_ms_bucket{path_group=~\"$path_group\"}[$__rate_interval])))",
+                    "expr": "histogram_quantile(0.95, sum by (le, path_group) (rate(gateway_request_duration_ms_milliseconds_bucket{path_group=~\"$path_group\"}[$__rate_interval])))",
                     "legendFormat": "p95 {{path_group}}",
                     "refId": "A"
                 },
@@ -486,7 +486,7 @@
                         "type": "prometheus",
                         "uid": "prometheus"
                     },
-                    "expr": "histogram_quantile(0.99, sum by (le, path_group) (rate(gateway_request_duration_ms_bucket{path_group=~\"$path_group\"}[$__rate_interval])))",
+                    "expr": "histogram_quantile(0.99, sum by (le, path_group) (rate(gateway_request_duration_ms_milliseconds_bucket{path_group=~\"$path_group\"}[$__rate_interval])))",
                     "legendFormat": "p99 {{path_group}}",
                     "refId": "B"
                 }
@@ -1703,7 +1703,7 @@
                         "type": "loki",
                         "uid": "loki"
                     },
-                    "expr": "{service=~\"$service\"}",
+                    "expr": "{service_name=~\"$service\"}",
                     "refId": "A"
                 }
             ],
@@ -1739,7 +1739,7 @@
                         "type": "loki",
                         "uid": "loki"
                     },
-                    "expr": "{service=~\"$service\"} |~ \"(?i:error|warning|failed|rejected|거부|실패|거절)\"",
+                    "expr": "{service_name=~\"$service\"} |~ \"(?i:error|warning|failed|rejected|거부|실패|거절)\"",
                     "refId": "A"
                 }
             ],
@@ -1914,9 +1914,23 @@
             },
             {
                 "current": {
-                    "selected": false,
-                    "text": "All",
-                    "value": ".*"
+                    "selected": true,
+                    "text": [
+                        "api-gateway",
+                        "user-service",
+                        "product-service",
+                        "order-service",
+                        "payment-service",
+                        "notification-service"
+                    ],
+                    "value": [
+                        "api-gateway",
+                        "user-service",
+                        "product-service",
+                        "order-service",
+                        "payment-service",
+                        "notification-service"
+                    ]
                 },
                 "datasource": {
                     "type": "loki",
@@ -1924,16 +1938,16 @@
                 },
                 "definition": "label_values(service)",
                 "hide": 0,
-                "includeAll": true,
+                "includeAll": false,
                 "label": "Service",
                 "multi": true,
                 "name": "service",
                 "options": [],
-                "query": "label_values(service)",
+                "query": "api-gateway,user-service,product-service,order-service,payment-service,notification-service",
                 "refresh": 1,
                 "regex": "",
                 "sort": 1,
-                "type": "query"
+                "type": "custom"
             }
         ]
     },
