@@ -4,7 +4,6 @@ metadata:
   labels:
     app: api-gateway
   name: api-gateway
-  namespace: micro-mart
 spec:
   replicas: 1
   selector:
@@ -21,7 +20,7 @@ spec:
           type: RuntimeDefault
       containers:
         - image: api-gateway
-          imagePullPolicy: Always # 항상 레지스트리에서 이미지를 새로 확인하고 가져옴
+          imagePullPolicy: IfNotPresent
           name: api-gateway
           securityContext:
             runAsNonRoot: true
