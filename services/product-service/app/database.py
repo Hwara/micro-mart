@@ -18,7 +18,12 @@ from .models import Base
 settings = get_settings()
 
 
-def _engine_options(database_url: str, debug: bool) -> dict:
+def _engine_options(
+    database_url: str,
+    debug: bool,
+    pool_size: int,
+    max_overflow: int,
+) -> dict:
     """
     SQLAlchemy async engine 옵션을 DB 드라이버에 맞게 구성한다.
 
@@ -33,8 +38,8 @@ def _engine_options(database_url: str, debug: bool) -> dict:
     if not database_url.startswith("sqlite"):
         options.update(
             {
-                "pool_size": 20,
-                "max_overflow": 10,
+                "pool_size": pool_size,
+                "max_overflow": max_overflow,
             }
         )
 
@@ -47,7 +52,12 @@ def _engine_options(database_url: str, debug: bool) -> dict:
 # pool_pre_ping: 쿼리 전에 연결이 살아있는지 확인 (k8s 재배포 시 stale 커넥션 방지)
 engine = create_async_engine(
     settings.database_url,
-    **_engine_options(settings.database_url, settings.debug),
+    **_engine_options(
+        settings.database_url,
+        settings.debug,
+        settings.db_pool_size,
+        settings.db_max_overflow,
+    ),
 )
 
 # 세션 팩토리: 매번 새로운 AsyncSession을 만들어주는 공장

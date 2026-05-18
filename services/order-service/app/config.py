@@ -23,6 +23,8 @@ class Settings(BaseSettings):
     otel_exporter_otlp_insecure: bool = False
 
     database_url: str
+    db_pool_size: int = 5
+    db_max_overflow: int = 15
 
     # 서비스 간 호출용 내부 토큰 (X-Internal-Token 헤더에 사용)
     internal_service_token: str

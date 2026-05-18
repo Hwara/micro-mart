@@ -25,6 +25,8 @@ class Settings(BaseSettings):
     # 데이터베이스
     database_url: str = "postgresql+asyncpg://micromart:micromart@localhost:5432/userdb"
     # SQLAlchemy 비동기 드라이버는 URL이 "postgresql+asyncpg://" 형식이어야 함
+    db_pool_size: int = 5
+    db_max_overflow: int = 15
 
     # Redis
     redis_url: str = "redis://localhost:6379/0"
