@@ -76,7 +76,7 @@ docker compose `
   -f docker/infra.yaml `
   -f docker/observability.yaml `
   -f docker/services.yaml `
-  up -d --build
+  up -d
 ```
 
 실행 전 서비스별 `.env` 파일과 JWT 키 파일이 필요합니다. 예시 환경변수는 `docker/.env.example` 및 각 서비스의 `.env.example`을 참고하세요.
@@ -91,6 +91,30 @@ docker compose `
 
 Kubernetes 로컬 배포는 [`k8s/README.md`](k8s/)를 참고하세요.
 
+## 로컬 이미지 빌드 및 배포
+
+빌드 전 REGISTRY 및 TAG 설정 필요
+-> 설정하지 않을 경우 기본 REGISTRY=172.25.46.10:32000, 기본 TAG=local
+
+예시:
+
+```bash
+REGISTRY=172.25.46.10:32000
+TAG=local
+```
+
+빌드
+
+```bash
+docker compose -f docker/services.yaml build
+```
+
+배포
+
+```bash
+docker compose -f docker/services.yaml build
+```
+
 ## 프로젝트 구조
 
 ```text
@@ -101,6 +125,7 @@ micro-mart/
 ├── k8s/            # Kubernetes 인프라, 관찰성, 서비스 배포 매니페스트
 ├── docs/           # 설계, 기능 정의, 컨벤션, reference 문서
 ├── requirements/   # 공통 런타임/테스트 의존성 및 constraints
+├── scripts/        # PyPi 버전 확인, JWT 키 생성 등 스크립트
 └── README.md
 ```
 

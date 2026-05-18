@@ -21,6 +21,7 @@ spec:
           type: RuntimeDefault
       containers:
         - image: notification-service
+          imagePullPolicy: Always # 항상 레지스트리에서 이미지를 새로 확인하고 가져옴
           name: notification-service
           securityContext:
             runAsNonRoot: true
