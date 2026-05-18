@@ -1315,7 +1315,7 @@
                         "type": "prometheus",
                         "uid": "prometheus"
                     },
-                    "expr": "histogram_quantile(0.95, sum by (le) (rate(payment_processing_latency_ms_bucket[$__rate_interval])))",
+                    "expr": "histogram_quantile(0.95, sum by (le) (rate(payment_processing_latency_ms_milliseconds_bucket[$__rate_interval])))",
                     "legendFormat": "p95",
                     "refId": "A"
                 },
@@ -1324,7 +1324,7 @@
                         "type": "prometheus",
                         "uid": "prometheus"
                     },
-                    "expr": "histogram_quantile(0.99, sum by (le) (rate(payment_processing_latency_ms_bucket[$__rate_interval])))",
+                    "expr": "histogram_quantile(0.99, sum by (le) (rate(payment_processing_latency_ms_milliseconds_bucket[$__rate_interval])))",
                     "legendFormat": "p99",
                     "refId": "B"
                 }
@@ -1644,7 +1644,7 @@
                         "type": "prometheus",
                         "uid": "prometheus"
                     },
-                    "expr": "histogram_quantile(0.95, sum by (le) (rate(notification_processing_latency_ms_bucket[$__rate_interval])))",
+                    "expr": "histogram_quantile(0.95, sum by (le) (rate(notification_processing_latency_ms_milliseconds_bucket[$__rate_interval])))",
                     "legendFormat": "processing p95",
                     "refId": "A"
                 },
@@ -1653,7 +1653,7 @@
                         "type": "prometheus",
                         "uid": "prometheus"
                     },
-                    "expr": "histogram_quantile(0.95, sum by (le) (rate(notification_send_latency_ms_bucket[$__rate_interval])))",
+                    "expr": "histogram_quantile(0.95, sum by (le) (rate(notification_send_latency_ms_milliseconds_bucket[$__rate_interval])))",
                     "legendFormat": "send p95",
                     "refId": "B"
                 }

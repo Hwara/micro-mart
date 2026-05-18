@@ -41,7 +41,7 @@ function resolveContentionProductId(baseUrl) {
   );
 
   if (response.status !== 200) {
-    fail(`contention product list failed: status=${response.status} body=${response.body}`);
+    fail(`contention product list failed: status=${response.status}`);
   }
 
   const body = response.json();

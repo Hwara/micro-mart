@@ -1,4 +1,4 @@
-# MicroMart k6 Baseline 부하 테스트
+# MicroMart k6 부하 테스트
 
 이 디렉터리는 Kubernetes local 환경에서 주요 주문 흐름의 정상 상태 baseline을 측정하기 위한 k6 스크립트를 담고 있습니다.
 

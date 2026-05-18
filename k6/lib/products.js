@@ -25,7 +25,7 @@ export function resolveProductIds(baseUrl) {
   );
 
   if (response.status !== 200) {
-    fail(`product list failed: status=${response.status} body=${response.body}`);
+    fail(`product list failed: status=${response.status}`);
   }
 
   const body = response.json();

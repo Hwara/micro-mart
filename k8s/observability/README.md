@@ -36,7 +36,7 @@ helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm
 설치/업그레이드:
 
 ```bash
-helm upgrade otel-collector open-telemetry/opentelemetry-collector -n micro-mart -f k8s/observability/otel-collector-values.yaml
+helm upgrade --install otel-collector open-telemetry/opentelemetry-collector -n micro-mart -f k8s/observability/otel-collector-values.yaml
 ```
 
 ### Prometheus
