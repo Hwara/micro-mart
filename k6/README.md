@@ -124,8 +124,8 @@ k6 run -e BASE_URL=http://localhost:8080 k6/scenarios/stock_contention_order_flo
 
 | Stage | Duration | Target |
 | --- | ---: | ---: |
-| Ramp up | 30s | 50 VUs |
-| Steady | 3m | 50 VUs |
+| Ramp up | 30s | 20 VUs |
+| Steady | 3m | 20 VUs |
 | Ramp down | 30s | 0 VUs |
 
 필요하면 profile 값을 환경변수로 조정할 수 있습니다.

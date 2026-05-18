@@ -112,7 +112,7 @@ docker compose -f docker/services.yaml build
 배포
 
 ```bash
-docker compose -f docker/services.yaml build
+docker compose -f docker/services.yaml push
 ```
 
 ## 프로젝트 구조
