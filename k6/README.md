@@ -160,3 +160,95 @@ Grafana에서는 baseline 지표에 더해 아래 항목을 함께 확인합니�
 - Prometheus: `order_failed_total`
 - Prometheus: `gateway_request_duration_ms`
 - Tempo: 일부 주문 trace에서 product 재조회와 재시도로 지연이 늘어나는지 확인
+
+## Payment Failure Chaos Run
+
+결제 실패 Chaos 테스트는 payment-service의 결제 거절이 Saga 보상 트랜잭션과
+관찰성 지표에 어떻게 드러나는지 확인합니다. 실행 전 payment-service에 실패율을 설정합니다.
+
+```text
+CHAOS_FAILURE_RATE=0.3
+CHAOS_LATENCY_MS=0
+CHAOS_DB_SLOWQUERY=false
+```
+
+```bash
+k6 run -e BASE_URL=http://localhost:8080 k6/scenarios/payment_failure_chaos_order_flow.js
+```
+
+이 시나리오는 `201`과 `402 PAYMENT_REJECTED`를 모두 기대 응답으로 취급합니다.
+
+확인 항목:
+
+- k6: `order_create_payment_failure` p95, `201`/`402` 비율
+- Prometheus: `payment_rejected_total{reason="chaos"}`
+- Prometheus: `saga_stock_rollback_total`
+- Prometheus: `order_failed_total`
+- Tempo: 결제 거절 trace에서 재고 복구 span이 이어지는지 확인
+
+## Payment Latency Chaos Run
+
+결제 지연 Chaos 테스트는 payment-service 지연이 주문 전체 p95/p99에 어떻게 전파되는지 확인합니다.
+실행 전 payment-service에 지연만 설정합니다.
+
+```text
+CHAOS_FAILURE_RATE=0
+CHAOS_LATENCY_MS=2000
+CHAOS_DB_SLOWQUERY=false
+```
+
+```bash
+k6 run -e BASE_URL=http://localhost:8080 k6/scenarios/payment_latency_chaos_order_flow.js
+```
+
+확인 항목:
+
+- k6: `order_create_payment_latency` p95
+- Prometheus: `payment_processing_latency_ms`
+- Prometheus: `gateway_request_duration_ms`
+- Prometheus: `order_completed_total`
+- Tempo: payment-service span이 주문 trace의 주요 지연 구간인지 확인
+
+## Auth And Rate Limit Run
+
+인증 실패와 Rate Limit 테스트는 gateway가 보호 경로의 잘못된 인증 요청을 401로 차단하고,
+고빈도 public 요청을 429로 제한하는지 확인합니다. Rate Limit을 관찰하려면
+`RATE_LIMIT_PER_MINUTE`를 테스트 VU 수에 맞게 낮춥니다.
+
+```bash
+k6 run -e BASE_URL=http://localhost:8080 k6/scenarios/auth_rate_limit_flow.js
+```
+
+확인 항목:
+
+- k6 setup: `auth_missing_token_setup` 401
+- k6 setup: `auth_invalid_token_setup` 401
+- k6 steady: `auth_missing_token`, `auth_invalid_token` 401 또는 429
+- k6: `rate_limit_probe` 200 또는 429
+- Prometheus: `gateway_auth_failure_total`
+- Prometheus: `gateway_rate_limit_total`
+
+## Mixed Read/Order Run
+
+조회 혼합 트래픽 테스트는 상품 조회, 주문 조회, 주문 생성을 섞어 정상 주문 단일 시나리오보다
+현실적인 baseline을 관찰합니다. Payment Chaos Mode는 꺼둔 상태에서 실행합니다.
+
+```text
+CHAOS_FAILURE_RATE=0
+CHAOS_LATENCY_MS=0
+CHAOS_DB_SLOWQUERY=false
+```
+
+```bash
+k6 run -e BASE_URL=http://localhost:8080 k6/scenarios/mixed_read_order_flow.js
+```
+
+기본 비율은 상품 목록 45%, 상품 상세 25%, 주문 목록 15%, 주문 상세 10%, 주문 생성 5%입니다.
+
+확인 항목:
+
+- k6: endpoint tag별 latency
+- Prometheus: `gateway_requests_total` path group 분포
+- Prometheus: `product_cache_hits_total` / `product_cache_misses_total`
+- Prometheus: `order_completed_total`
+- Tempo: 읽기 요청과 주문 생성 요청의 trace 길이 차이

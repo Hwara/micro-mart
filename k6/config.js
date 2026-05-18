@@ -19,7 +19,11 @@ function parsePositiveInteger(value, fallback) {
 }
 
 const TARGET_VUS = parsePositiveInteger(__ENV.K6_TARGET_VUS, 20);
-const CONTENTION_TARGET_VUS = parsePositiveInteger(__ENV.K6_CONTENTION_TARGET_VUS, 50);
+const CONTENTION_TARGET_VUS = parsePositiveInteger(__ENV.K6_CONTENTION_TARGET_VUS, 20);
+const PAYMENT_FAILURE_TARGET_VUS = parsePositiveInteger(__ENV.K6_PAYMENT_FAILURE_TARGET_VUS, 20);
+const PAYMENT_LATENCY_TARGET_VUS = parsePositiveInteger(__ENV.K6_PAYMENT_LATENCY_TARGET_VUS, 10);
+const AUTH_RATE_LIMIT_TARGET_VUS = parsePositiveInteger(__ENV.K6_AUTH_RATE_LIMIT_TARGET_VUS, 10);
+const MIXED_TRAFFIC_TARGET_VUS = parsePositiveInteger(__ENV.K6_MIXED_TRAFFIC_TARGET_VUS, 20);
 
 export const SMOKE_OPTIONS = {
   vus: 1,
@@ -55,6 +59,58 @@ export const STOCK_CONTENTION_OPTIONS = {
     checks: ["rate>0.98"],
     http_req_failed: ["rate<0.02"],
     "http_req_duration{endpoint:order_create_contention}": ["p(95)<1500"],
+  },
+};
+
+export const PAYMENT_FAILURE_OPTIONS = {
+  stages: [
+    { duration: __ENV.K6_PAYMENT_FAILURE_RAMP_UP || "30s", target: PAYMENT_FAILURE_TARGET_VUS },
+    { duration: __ENV.K6_PAYMENT_FAILURE_STEADY || "3m", target: PAYMENT_FAILURE_TARGET_VUS },
+    { duration: __ENV.K6_PAYMENT_FAILURE_RAMP_DOWN || "30s", target: 0 },
+  ],
+  thresholds: {
+    checks: ["rate>0.95"],
+    http_req_failed: ["rate<0.02"],
+    "http_req_duration{endpoint:order_create_payment_failure}": ["p(95)<1500"],
+  },
+};
+
+export const PAYMENT_LATENCY_OPTIONS = {
+  stages: [
+    { duration: __ENV.K6_PAYMENT_LATENCY_RAMP_UP || "30s", target: PAYMENT_LATENCY_TARGET_VUS },
+    { duration: __ENV.K6_PAYMENT_LATENCY_STEADY || "3m", target: PAYMENT_LATENCY_TARGET_VUS },
+    { duration: __ENV.K6_PAYMENT_LATENCY_RAMP_DOWN || "30s", target: 0 },
+  ],
+  thresholds: {
+    checks: ["rate>0.98"],
+    http_req_failed: ["rate<0.02"],
+    "http_req_duration{endpoint:order_create_payment_latency}": ["p(95)<5000"],
+  },
+};
+
+export const AUTH_RATE_LIMIT_OPTIONS = {
+  stages: [
+    { duration: __ENV.K6_AUTH_RATE_LIMIT_RAMP_UP || "10s", target: AUTH_RATE_LIMIT_TARGET_VUS },
+    { duration: __ENV.K6_AUTH_RATE_LIMIT_STEADY || "1m", target: AUTH_RATE_LIMIT_TARGET_VUS },
+    { duration: __ENV.K6_AUTH_RATE_LIMIT_RAMP_DOWN || "10s", target: 0 },
+  ],
+  thresholds: {
+    checks: ["rate>0.95"],
+    http_req_failed: ["rate<0.02"],
+  },
+};
+
+export const MIXED_TRAFFIC_OPTIONS = {
+  stages: [
+    { duration: __ENV.K6_MIXED_TRAFFIC_RAMP_UP || "1m", target: MIXED_TRAFFIC_TARGET_VUS },
+    { duration: __ENV.K6_MIXED_TRAFFIC_STEADY || "5m", target: MIXED_TRAFFIC_TARGET_VUS },
+    { duration: __ENV.K6_MIXED_TRAFFIC_RAMP_DOWN || "1m", target: 0 },
+  ],
+  thresholds: {
+    checks: ["rate>0.99"],
+    http_req_failed: ["rate<0.01"],
+    http_req_duration: ["p(95)<1200"],
+    "http_req_duration{endpoint:order_create_mixed}": ["p(95)<1500"],
   },
 };
 
