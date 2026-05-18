@@ -6,6 +6,20 @@ export const TEST_USER_DEVICE = __ENV.K6_USER_DEVICE || "k6-baseline";
 
 export const PRODUCT_NAME_PREFIX = __ENV.K6_PRODUCT_PREFIX || "k6-baseline-";
 
+/**
+ * Parses a positive integer setting and falls back when the value is invalid.
+ *
+ * @param {string | undefined} value Environment value to parse.
+ * @param {number} fallback Positive integer fallback.
+ * @returns {number} Parsed positive integer or fallback.
+ */
+function parsePositiveInteger(value, fallback) {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+const TARGET_VUS = parsePositiveInteger(__ENV.K6_TARGET_VUS, 20);
+
 export const SMOKE_OPTIONS = {
   vus: 1,
   iterations: 1,
@@ -18,8 +32,8 @@ export const SMOKE_OPTIONS = {
 
 export const BASELINE_OPTIONS = {
   stages: [
-    { duration: __ENV.K6_RAMP_UP || "1m", target: Number(__ENV.K6_TARGET_VUS || 20) },
-    { duration: __ENV.K6_STEADY || "5m", target: Number(__ENV.K6_TARGET_VUS || 20) },
+    { duration: __ENV.K6_RAMP_UP || "1m", target: TARGET_VUS },
+    { duration: __ENV.K6_STEADY || "5m", target: TARGET_VUS },
     { duration: __ENV.K6_RAMP_DOWN || "1m", target: 0 },
   ],
   thresholds: {
@@ -30,6 +44,14 @@ export const BASELINE_OPTIONS = {
   },
 };
 
+/**
+ * Reads comma-separated PRODUCT_IDS from __ENV and returns positive integer IDs.
+ *
+ * Missing or empty PRODUCT_IDS returns an empty array. Each value is trimmed,
+ * converted to Number, and kept only when it is an integer greater than zero.
+ *
+ * @returns {number[]} Product IDs to use directly instead of fetching products.
+ */
 export function parseProductIds() {
   if (!__ENV.PRODUCT_IDS) {
     return [];
@@ -40,6 +62,14 @@ export function parseProductIds() {
     .filter((id) => Number.isInteger(id) && id > 0);
 }
 
+/**
+ * Builds JSON request options for k6 HTTP calls.
+ *
+ * @param {Record<string, string>} [extraHeaders={}] Headers merged after the
+ * default Content-Type, allowing callers to override it.
+ * @param {Record<string, string>} [tags={}] k6 tags passed through unchanged.
+ * @returns {{headers: Record<string, string>, tags: Record<string, string>}}
+ */
 export function jsonParams(extraHeaders = {}, tags = {}) {
   return {
     headers: {

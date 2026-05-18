@@ -2,6 +2,8 @@
 -- Run against productdb only. Existing k6-baseline-* rows are replaced so repeated
 -- baseline runs start from a predictable high-stock product pool.
 
+BEGIN;
+
 DELETE FROM products
 WHERE name LIKE 'k6-baseline-%';
 
@@ -14,3 +16,5 @@ SELECT
   1 AS version,
   true AS is_active
 FROM generate_series(1, 100) AS i;
+
+COMMIT;

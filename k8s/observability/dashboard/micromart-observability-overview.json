@@ -146,7 +146,7 @@
                         "type": "prometheus",
                         "uid": "prometheus"
                     },
-                    "expr": "sum(rate(gateway_requests_total{status_code=~\"4..|5..\"}[$__rate_interval])) / clamp_min(sum(rate(gateway_requests_total[$__rate_interval])), 1)",
+                    "expr": "sum(rate(gateway_requests_total{status_code=~\"4..|5..\"}[$__rate_interval])) / clamp_min(sum(rate(gateway_requests_total[$__rate_interval])), 1e-6)",
                     "legendFormat": "Error Rate",
                     "refId": "A"
                 }
@@ -216,7 +216,7 @@
                         "type": "prometheus",
                         "uid": "prometheus"
                     },
-                    "expr": "sum(rate(order_completed_total[$__rate_interval])) / clamp_min(sum(rate(order_created_total[$__rate_interval])), 1)",
+                    "expr": "sum(rate(order_completed_total[$__rate_interval])) / clamp_min(sum(rate(order_created_total[$__rate_interval])), 1e-6)",
                     "legendFormat": "Completion Rate",
                     "refId": "A"
                 }
@@ -286,7 +286,7 @@
                         "type": "prometheus",
                         "uid": "prometheus"
                     },
-                    "expr": "sum(rate(payment_approved_total[$__rate_interval])) / clamp_min(sum(rate(payment_total[$__rate_interval])), 1)",
+                    "expr": "sum(rate(payment_approved_total[$__rate_interval])) / clamp_min(sum(rate(payment_total[$__rate_interval])), 1e-6)",
                     "legendFormat": "Approval Rate",
                     "refId": "A"
                 }
@@ -356,7 +356,7 @@
                         "type": "prometheus",
                         "uid": "prometheus"
                     },
-                    "expr": "sum(rate(notification_send_success_total[$__rate_interval])) / clamp_min(sum(rate(notification_message_consumed_total[$__rate_interval])), 1)",
+                    "expr": "sum(rate(notification_send_success_total[$__rate_interval])) / clamp_min(sum(rate(notification_message_consumed_total[$__rate_interval])), 1e-6)",
                     "legendFormat": "Notification Success Rate",
                     "refId": "A"
                 }
@@ -588,7 +588,7 @@
                         "type": "prometheus",
                         "uid": "prometheus"
                     },
-                    "expr": "sum by (reason) (rate(gateway_auth_failure_total{reason=~\"$reason\"}[$__rate_interval]))",
+                    "expr": "sum by (reason) (rate(gateway_auth_failure_total{reason=~\"$auth_reason\"}[$__rate_interval]))",
                     "legendFormat": "{{reason}}",
                     "refId": "A"
                 }
@@ -1056,7 +1056,7 @@
                         "type": "prometheus",
                         "uid": "prometheus"
                     },
-                    "expr": "sum(rate(product_cache_hits_total[$__rate_interval])) / clamp_min(sum(rate(product_cache_hits_total[$__rate_interval])) + sum(rate(product_cache_misses_total[$__rate_interval])), 1)",
+                    "expr": "sum(rate(product_cache_hits_total[$__rate_interval])) / clamp_min(sum(rate(product_cache_hits_total[$__rate_interval])) + sum(rate(product_cache_misses_total[$__rate_interval])), 1e-6)",
                     "legendFormat": "hit ratio",
                     "refId": "A"
                 }
@@ -1375,7 +1375,7 @@
                         "type": "prometheus",
                         "uid": "prometheus"
                     },
-                    "expr": "sum by (reason) (rate(payment_rejected_total{reason=~\"$reason\"}[$__rate_interval]))",
+                    "expr": "sum by (reason) (rate(payment_rejected_total{reason=~\"$payment_reason\"}[$__rate_interval]))",
                     "legendFormat": "{{reason}}",
                     "refId": "A"
                 }
@@ -1590,7 +1590,7 @@
                         "type": "prometheus",
                         "uid": "prometheus"
                     },
-                    "expr": "sum by (reason, channel) (rate(notification_send_failed_total{reason=~\"$reason\"}[$__rate_interval]))",
+                    "expr": "sum by (reason, channel) (rate(notification_send_failed_total{reason=~\"$notification_reason\"}[$__rate_interval]))",
                     "legendFormat": "{{reason}} {{channel}}",
                     "refId": "A"
                 }
@@ -1739,7 +1739,7 @@
                         "type": "loki",
                         "uid": "loki"
                     },
-                    "expr": "{service=~\"$service\"} |~ \"error|warning|failed|rejected|거부|실패|거절\"",
+                    "expr": "{service=~\"$service\"} |~ \"(?i:error|warning|failed|rejected|거부|실패|거절)\"",
                     "refId": "A"
                 }
             ],
@@ -1827,6 +1827,84 @@
                 "options": [],
                 "query": {
                     "query": "label_values(order_failed_total, reason)",
+                    "refId": "PrometheusVariableQueryEditor-VariableQuery"
+                },
+                "refresh": 1,
+                "regex": "",
+                "sort": 1,
+                "type": "query"
+            },
+            {
+                "current": {
+                    "selected": false,
+                    "text": "All",
+                    "value": ".*"
+                },
+                "datasource": {
+                    "type": "prometheus",
+                    "uid": "prometheus"
+                },
+                "definition": "label_values(gateway_auth_failure_total, reason)",
+                "hide": 0,
+                "includeAll": true,
+                "label": "Auth Reason",
+                "multi": true,
+                "name": "auth_reason",
+                "options": [],
+                "query": {
+                    "query": "label_values(gateway_auth_failure_total, reason)",
+                    "refId": "PrometheusVariableQueryEditor-VariableQuery"
+                },
+                "refresh": 1,
+                "regex": "",
+                "sort": 1,
+                "type": "query"
+            },
+            {
+                "current": {
+                    "selected": false,
+                    "text": "All",
+                    "value": ".*"
+                },
+                "datasource": {
+                    "type": "prometheus",
+                    "uid": "prometheus"
+                },
+                "definition": "label_values(payment_rejected_total, reason)",
+                "hide": 0,
+                "includeAll": true,
+                "label": "Payment Reason",
+                "multi": true,
+                "name": "payment_reason",
+                "options": [],
+                "query": {
+                    "query": "label_values(payment_rejected_total, reason)",
+                    "refId": "PrometheusVariableQueryEditor-VariableQuery"
+                },
+                "refresh": 1,
+                "regex": "",
+                "sort": 1,
+                "type": "query"
+            },
+            {
+                "current": {
+                    "selected": false,
+                    "text": "All",
+                    "value": ".*"
+                },
+                "datasource": {
+                    "type": "prometheus",
+                    "uid": "prometheus"
+                },
+                "definition": "label_values(notification_send_failed_total, reason)",
+                "hide": 0,
+                "includeAll": true,
+                "label": "Notification Reason",
+                "multi": true,
+                "name": "notification_reason",
+                "options": [],
+                "query": {
+                    "query": "label_values(notification_send_failed_total, reason)",
                     "refId": "PrometheusVariableQueryEditor-VariableQuery"
                 },
                 "refresh": 1,

@@ -9,6 +9,8 @@ datasources:
     url: http://prometheus:9090
     isDefault: true
     editable: false
+    jsonData:
+      timeInterval: 60s # Prometheus scrape interval
 
   - name: Loki
     type: loki
@@ -22,7 +24,6 @@ datasources:
           matcherRegex: '"trace_id":"(\w+)"'
           name: TraceID
           url: "$${__value.raw}"
-      timeInterval: 60s # Prometheus scrape interval
 
   - name: Tempo
     type: tempo
