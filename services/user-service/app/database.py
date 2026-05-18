@@ -33,7 +33,7 @@ def _engine_options(database_url: str, debug: bool) -> dict:
     if not database_url.startswith("sqlite"):
         options.update(
             {
-                "pool_size": 5,
+                "pool_size": 20,
                 "max_overflow": 10,
             }
         )

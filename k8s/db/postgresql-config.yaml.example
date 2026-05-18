@@ -3,3 +3,7 @@ auth:
   postgresPassword: "CHANGE_ME_POSTGRES_PASSWORD"
   password: "CHANGE_ME_APP_PASSWORD"
   database: "userdb"
+
+# 기본 값은 t3.nano 기준으로 되어 있어 자원 허용량이 적음
+primary:
+  resourcesPreset: "micro"
