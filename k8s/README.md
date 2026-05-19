@@ -125,7 +125,7 @@ MetalLB와 Envoy Gateway를 사용합니다.
 다음의 문서를 참고하세요.
 
 1. MetalLB 설치 및 IP pool 설정: [`k8s/metallb/README.md`](metallb/)
-2. Envoy Gateway 및 Gateway API 라우팅 설정: [`k8s/gateway/README.md`](gateway/)
+2. Envoy Gateway 설치 및 Gateway API 라우팅 설정: [`k8s/gateway/README.md`](gateway/)
 
 ---
 

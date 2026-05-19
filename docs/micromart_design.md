@@ -534,6 +534,16 @@ micro-mart/
 │   │   ├── README.md
 │   │   ├── postgresql-config.yaml.example
 │   │   └── redis.yaml
+│   ├── gateway/
+│   │   ├── README.md
+│   │   ├── micro-mart-gateway.yaml
+│   │   ├── micro-mart-httproute.yaml
+│   │   ├── grafana-gateway.yaml
+│   │   └── grafana-httproute.yaml
+│   ├── metallb/
+│   │   ├── README.md
+│   │   ├── ip-address-pool.yaml
+│   │   └── l2-advertisement.yaml
 │   ├── namespaces/
 │   │   └── namespace.yaml
 │   ├── nats/
@@ -614,6 +624,15 @@ micro-mart/
   NATS는 `nats:2.14.0`에서 JetStream을 켠 뒤 `/tmp/nats`에 PVC `1Gi`를 연결한다.
 - OTel Collector는 `micro-mart` namespace에 Helm으로 배포하고, Prometheus, Grafana, Loki,
   Tempo는 `monitoring` namespace에 Helm values 파일로 배포한다.
+- 로컬 외부 노출은 MetalLB와 Envoy Gateway 기반 Gateway API로 구성한다. MetalLB는
+  `172.25.46.100-172.25.46.200` 대역을 Layer 2 모드로 광고하고, Envoy Gateway가 생성하는
+  LoadBalancer Service에 외부 IP를 할당한다.
+- `api-gateway`는 `micro-mart-local` namespace의 `micro-mart-gateway`와
+  `micro-mart-http-route`를 통해 외부에서 접근한다. Grafana는 `monitoring` namespace의
+  `grafana-gateway`와 `grafana-http-route`를 통해 접근한다.
+- 외부 클라이언트용 애플리케이션 트래픽은 계속 `api-gateway`를 단일 진입점으로 사용한다.
+  `payment-service`, `notification-service` 같은 내부 전용 서비스는 Gateway API로 직접
+  노출하지 않는다.
 
 ---
 
@@ -629,6 +648,7 @@ micro-mart/
 8. ✅ **notification-service** — NATS 소비, 알림 발송 시뮬레이션, 관찰성 메트릭
 9. ✅ **Kubernetes 매니페스트** — Deployment, Service, ConfigMap, Secret, local Kustomize overlay
 10. ✅ **k6 부하 스크립트** — Kubernetes local baseline 주문 생성 부하 시나리오 추가
+11. ✅ **Kubernetes 외부 노출** — MetalLB, Envoy Gateway, Gateway API로 api-gateway와 Grafana 노출
 
 ---
 
