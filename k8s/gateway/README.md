@@ -59,6 +59,10 @@ curl --verbose \
 
 테스트가 끝난 뒤 quickstart 리소스가 실제 MicroMart 설정과 충돌하지 않도록 정리한다.
 
+```bash
+kubectl delete -f https://github.com/envoyproxy/gateway/releases/download/v1.8.0/quickstart.yaml -n default
+```
+
 ---
 
 ## 2. Gateway API 설정
