@@ -542,6 +542,20 @@ resources:
 - Prometheus, Grafana, Loki, Tempo는 `monitoring` namespace에 Helm values 파일로 배포한다.
   OTel Collector는 trace를 Tempo, metric을 Prometheus Remote Write, log를 Loki로 전달한다.
 
+### Kubernetes 외부 노출 규칙
+
+- 로컬 Kubernetes에서 `port-forward` 없이 외부 접근이 필요한 경우 MetalLB와 Envoy Gateway
+  기반 Gateway API를 사용한다.
+- MetalLB manifest는 `k8s/metallb/` 아래에 둔다. 로컬 기본 IP pool은
+  `172.25.46.100-172.25.46.200`이며, 간단한 로컬 로드밸런서 용도로 Layer 2 모드를 사용한다.
+- Gateway API manifest는 `k8s/gateway/` 아래에 둔다. Envoy Gateway 설치와 Gateway/HTTPRoute
+  적용 절차는 `k8s/gateway/README.md`에 기록한다.
+- 외부 애플리케이션 트래픽은 `api-gateway`를 통해서만 들어오게 한다. 하위 서비스의 내부 API,
+  특히 `payment-service`, `product-service`의 내부 재고 API, `notification-service`는 직접
+  외부 노출하지 않는다.
+- Grafana처럼 운영/관찰용 UI를 노출할 때는 애플리케이션 라우트와 namespace를 분리한다.
+  현재 Grafana Gateway/HTTPRoute는 `monitoring` namespace에 둔다.
+
 ---
 
 ## 21. 문서 동기화 규칙
