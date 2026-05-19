@@ -6,6 +6,17 @@
 
 ```text
 k8s/
+├── README.md                  # 전체 배포 흐름의 목차/진입점
+├── metallb/
+│   ├── ip-address-pool.yaml
+│   ├── l2-advertisement.yaml
+│   └── README.md              # MetalLB 설치와 IP pool 설정
+├── gateway/
+│   ├── micro-mart-gateway.yaml
+│   ├── micro-mart-httproute.yaml
+│   ├── grafana-gateway.yaml
+│   ├── grafana-httproute.yaml
+│   └── README.md              # Envoy Gateway + Gateway API 설정
 ├── db/                    # PostgreSQL, Redis 등 로컬 인프라 구성
 ├── namespaces/            # 공통 namespace 매니페스트
 ├── observability/         # 관찰성 스택 환경 구성
@@ -105,6 +116,18 @@ kubectl kustomize k8s/services/overlays/local
 ### 이후 필요에 따라 관찰성 스택 환경 구축
 
 Kubernetes 관찰성 스택 환경 구축은 [`k8s/observability/README.md`](observability/)를 참고하세요.
+
+### 외부 노출 설정
+
+로컬 Kubernetes에서 `port-forward` 없이 `api-gateway`와 Grafana에 접근하려면
+MetalLB와 Envoy Gateway를 사용합니다.
+
+다음의 문서를 참고하세요.
+
+1. MetalLB 설치 및 IP pool 설정: [`k8s/metallb/README.md`](metallb/)
+2. Envoy Gateway 및 Gateway API 라우팅 설정: [`k8s/gateway/README.md`](gateway/)
+
+---
 
 ## base와 overlay 역할
 

@@ -1,0 +1,14 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: grafana-gateway
+  namespace: monitoring
+spec:
+  gatewayClassName: eg
+  listeners:
+    - protocol: HTTP
+      port: 80
+      name: grafana-gateway
+      allowedRoutes:
+        namespaces:
+          from: Same
