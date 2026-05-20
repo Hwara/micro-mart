@@ -2,3 +2,6 @@
 -r ../../requirements/service-common.txt
 
 redis
+
+# DB migration
+alembic
