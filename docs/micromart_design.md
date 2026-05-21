@@ -19,6 +19,7 @@ LGTM(Loki, Grafana, Tempo, Prometheus) 관찰성 스택을 깊이 학습하기 �
 | 데이터 검증 / 설정 | Pydantic 2.13.4 + pydantic-settings 2.14.0 | 요청/응답 검증, 환경변수 타입 검증 |
 | ASGI 기반 | Starlette 0.52.1 | FastAPI 기반 ASGI 런타임 |
 | ORM | SQLAlchemy 2.0 async | 비동기 DB 세션, Mapped 타입 안전성 |
+| DB 마이그레이션 | Alembic 1.18.4 | 서비스별 PostgreSQL schema 변경 이력 관리 |
 | 로깅 | structlog 25.5.0 | JSON 구조화 로그, traceId/spanId 자동 주입 |
 | 데이터베이스 | PostgreSQL 16 (서비스별 DB 분리) | MSA 원칙 준수, 서비스 간 DB 공유 금지 |
 | 캐시 | Redis 7.4.x (redis.asyncio) | Refresh Token 저장, product-service Cache-Aside |
@@ -321,6 +322,7 @@ user:{id}:token_version → 버전 번호
 ### 핵심 설계 원칙
 
 - 서비스별 DB 분리, 서비스 간 물리적 FK 금지
+- DB schema 변경 이력은 DB 보유 서비스별 Alembic migration으로 관리
 - 주문 데이터는 스냅샷 저장(`product_name`, `unit_price`, `total_amount`)
 - 재고 차감은 낙관적 잠금(`version`) 사용
 - 결제는 `payments.order_id UNIQUE`로 멱등성 보장
@@ -426,6 +428,9 @@ micro-mart/
 │   │   ├── pytest.ini
 │   │   └── requirements.txt
 │   ├── user-service/
+│   │   ├── alembic/
+│   │   │   ├── env.py
+│   │   │   └── versions/
 │   │   ├── app/
 │   │   │   ├── main.py
 │   │   │   ├── config.py
@@ -439,8 +444,12 @@ micro-mart/
 │   │   │       └── auth_service.py
 │   │   ├── Dockerfile
 │   │   ├── .env.example
+│   │   ├── alembic.ini
 │   │   └── requirements.txt
 │   ├── product-service/
+│   │   ├── alembic/
+│   │   │   ├── env.py
+│   │   │   └── versions/
 │   │   ├── app/
 │   │   │   ├── main.py
 │   │   │   ├── config.py
@@ -455,8 +464,12 @@ micro-mart/
 │   │   │       └── product_service.py
 │   │   ├── Dockerfile
 │   │   ├── .env.example
+│   │   ├── alembic.ini
 │   │   └── requirements.txt
 │   ├── payment-service/
+│   │   ├── alembic/
+│   │   │   ├── env.py
+│   │   │   └── versions/
 │   │   ├── app/
 │   │   │   ├── __init__.py
 │   │   │   ├── main.py
@@ -473,9 +486,13 @@ micro-mart/
 │   │   │   ├── conftest.py
 │   │   │   └── test_payments.py
 │   │   ├── .env.example
+│   │   ├── alembic.ini
 │   │   ├── pytest.ini
 │   │   └── requirements.txt
 │   ├── order-service/
+│   │   ├── alembic/
+│   │   │   ├── env.py
+│   │   │   └── versions/
 │   │   ├── app/
 │   │   │   ├── __init__.py
 │   │   │   ├── main.py
@@ -492,6 +509,7 @@ micro-mart/
 │   │   │       └── order_service.py
 │   │   ├── tests/
 │   │   ├── .env.example
+│   │   ├── alembic.ini
 │   │   ├── pytest.ini
 │   │   └── requirements.txt
 │   └── notification-service/
@@ -649,6 +667,7 @@ micro-mart/
 9. ✅ **Kubernetes 매니페스트** — Deployment, Service, ConfigMap, Secret, local Kustomize overlay
 10. ✅ **k6 부하 스크립트** — Kubernetes local baseline 주문 생성 부하 시나리오 추가
 11. ✅ **Kubernetes 외부 노출** — MetalLB, Envoy Gateway, Gateway API로 api-gateway와 Grafana 노출
+12. ✅ **서비스별 DB 마이그레이션** — user/product/order/payment-service에 Alembic 초기 revision 추가
 
 ---
 

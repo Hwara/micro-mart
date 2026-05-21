@@ -2,3 +2,6 @@
 -r ../../requirements/service-common.txt
 
 nats-py
+
+# DB migration
+alembic
