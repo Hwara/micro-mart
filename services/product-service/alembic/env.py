@@ -2,13 +2,13 @@
 Alembic migration environment for product-service.
 
 This file keeps product-service migrations scoped to productdb and reads the
-same Settings object as the application so local migration commands use the
-service's DATABASE_URL convention.
+DATABASE_URL environment variable required for schema management.
 """
 
 from __future__ import annotations
 
 import asyncio
+import os
 import sys
 from logging.config import fileConfig
 from pathlib import Path
@@ -21,6 +21,8 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 SERVICE_DIR = Path(__file__).resolve().parents[1]
 REPO_ROOT = SERVICE_DIR.parents[1]
 
+# Prepend SERVICE_DIR and REPO_ROOT with sys.path.insert(0, ...) so local modules win.
+# This intentionally changes import resolution order for migration commands.
 for path in (SERVICE_DIR, REPO_ROOT):
     path_text = str(path)
     if path_text not in sys.path:
@@ -35,14 +37,13 @@ if config.config_file_name is not None:
 
 target_metadata = Base.metadata
 
-import os  # noqa: E402
-
-DEFAULT_DATABASE_URL = "postgresql+asyncpg://micromart:micromart@localhost:5432/productdb"
-
 
 def _database_url() -> str:
     """Return the product-service database URL for Alembic."""
-    return os.environ.get("DATABASE_URL", DEFAULT_DATABASE_URL)
+    database_url = os.environ.get("DATABASE_URL")
+    if not database_url:
+        raise RuntimeError("DATABASE_URL is required for product-service Alembic migrations.")
+    return database_url
 
 
 def run_migrations_offline() -> None:

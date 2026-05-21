@@ -17,6 +17,7 @@ MicroMart는 Loki, Grafana, Tempo, Prometheus를 실제 서비스 간 연쇄 호
 | Chaos Mode 장애 주입 | Prometheus 메트릭 변화와 Grafana 알림 흐름 확인 |
 
 상세한 서비스 책임, 엔드포인트 계약, 상태 전이, 데이터 모델은 `docs/` 문서를 기준으로 관리합니다.
+PostgreSQL schema 변경 이력은 DB를 보유한 서비스별 Alembic migration으로 관리합니다.
 
 ## 아키텍처
 
@@ -66,6 +67,10 @@ flowchart LR
 | `order-service` | 주문 생성/조회, Saga 오케스트레이션, NATS 이벤트 발행 | `8003` | 완료 |
 | `payment-service` | 결제 승인/거절 시뮬레이션, Chaos Mode, 환불 | `8004` | 완료 |
 | `notification-service` | `order.completed` 이벤트 소비, 알림 발송 시뮬레이션 | 내부 | 완료 |
+
+## DB 마이그레이션
+
+`user-service`, `product-service`, `order-service`, `payment-service`는 각 서비스 폴더에 독립적인 Alembic 설정과 migration history를 둡니다.
 
 ## 로컬 실행
 
@@ -120,6 +125,7 @@ docker compose -f docker/services.yaml push
 ```text
 micro-mart/
 ├── services/       # api-gateway, user/product/order/payment/notification 서비스
+│   └── */alembic/  # DB 보유 서비스별 Alembic migration history
 ├── shared/         # 공통 OpenTelemetry 및 로깅 모듈
 ├── docker/         # 로컬 infra, observability, service Compose 구성
 ├── k8s/            # Kubernetes 인프라, 관찰성, 서비스 배포 매니페스트
@@ -157,3 +163,4 @@ micro-mart/
 | `notification-service` | 완료 |
 | Kubernetes 매니페스트 | 완료 |
 | k6 부하 스크립트 | 완료 |
+| 서비스별 Alembic migration | 완료 |

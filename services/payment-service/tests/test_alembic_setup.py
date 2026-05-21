@@ -23,11 +23,15 @@ def test_initial_revision_documents_payment_tables() -> None:
     versions_dir = SERVICE_DIR / "alembic" / "versions"
     revision_files = list(versions_dir.glob("*.py"))
 
-    assert len(revision_files) == 1
+    revision_file = next(
+        (path for path in revision_files if "create_payment_tables" in path.name),
+        None,
+    )
 
-    revision_text = revision_files[0].read_text(encoding="utf-8")
+    assert revision_file is not None
 
-    assert "create_payment_tables" in revision_files[0].name
+    revision_text = revision_file.read_text(encoding="utf-8")
+
     assert '"payments"' in revision_text
     assert '"refunds"' in revision_text
     assert 'sa.ForeignKeyConstraint(["payment_id"], ["payments.id"])' in revision_text
@@ -40,3 +44,12 @@ def test_initial_revision_documents_payment_tables() -> None:
         in revision_text
     )
     assert 'op.drop_table("payments")' in revision_text
+
+
+def test_alembic_env_requires_database_url() -> None:
+    """Alembic should fail fast instead of silently targeting a default DB."""
+    env_text = SERVICE_DIR.joinpath("alembic", "env.py").read_text(encoding="utf-8")
+
+    assert "DEFAULT_DATABASE_URL" not in env_text
+    assert 'os.environ.get("DATABASE_URL")' in env_text
+    assert "raise RuntimeError" in env_text

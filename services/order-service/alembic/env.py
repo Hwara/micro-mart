@@ -20,8 +20,9 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 
 SERVICE_DIR = Path(__file__).resolve().parents[1]
 REPO_ROOT = SERVICE_DIR.parents[1]
-DEFAULT_DATABASE_URL = "postgresql+asyncpg://micromart:micromart@localhost:5432/orderdb"
 
+# Prepend SERVICE_DIR and REPO_ROOT with sys.path.insert(0, ...) so local modules win.
+# This intentionally changes import resolution order for migration commands.
 for path in (SERVICE_DIR, REPO_ROOT):
     path_text = str(path)
     if path_text not in sys.path:
@@ -39,7 +40,10 @@ target_metadata = Base.metadata
 
 def _database_url() -> str:
     """Return the order-service database URL for Alembic."""
-    return os.environ.get("DATABASE_URL", DEFAULT_DATABASE_URL)
+    database_url = os.environ.get("DATABASE_URL")
+    if not database_url:
+        raise RuntimeError("DATABASE_URL is required for order-service Alembic migrations.")
+    return database_url
 
 
 def run_migrations_offline() -> None:

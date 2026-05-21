@@ -1,6 +1,6 @@
 # MicroMart — 서비스 기능 정의 문서
 
-> 최종 갱신일: 2026-05-11
+> 최종 갱신일: 2026-05-20
 > 목적: 서비스별 책임, 엔드포인트, 내부 동작, 서비스 간 호출 계약을 구현 전에 명확히 고정하기 위한 기능 정의 문서
 
 ---
@@ -204,6 +204,9 @@ class JWKSCache:
 
 ```text
 services/user-service/
+├── alembic/
+│   ├── env.py
+│   └── versions/
 ├── app/
 │   ├── main.py
 │   ├── config.py
@@ -216,6 +219,7 @@ services/user-service/
 │   └── services/
 │       └── auth_service.py # 인증 비즈니스 로직, JWKS 생성
 ├── .env.example
+├── alembic.ini
 ├── Dockerfile
 └── requirements.txt
 ```
@@ -294,6 +298,9 @@ services/user-service/
 
 ```text
 services/product-service/
+├── alembic/
+│   ├── env.py
+│   └── versions/
 ├── app/
 │   ├── main.py
 │   ├── config.py
@@ -307,6 +314,7 @@ services/product-service/
 │   └── services/
 │       └── product_service.py # 상품/재고 비즈니스 로직, 메트릭
 ├── .env.example
+├── alembic.ini
 ├── Dockerfile
 └── requirements.txt
 ```
@@ -390,6 +398,9 @@ services/product-service/
 
 ```text
 services/payment-service/
+├── alembic/
+│   ├── env.py
+│   └── versions/
 ├── app/
 │   ├── main.py
 │   ├── config.py
@@ -403,6 +414,7 @@ services/payment-service/
 │       └── payment_service.py # 결제/환불 상태 전이, Chaos Mode, 메트릭
 ├── tests/
 ├── .env.example
+├── alembic.ini
 ├── pytest.ini
 └── requirements.txt
 ```
@@ -504,6 +516,9 @@ services/payment-service/
 
 ```text
 services/order-service/
+├── alembic/
+│   ├── env.py
+│   └── versions/
 ├── app/
 │   ├── __init__.py
 │   ├── main.py           # FastAPI 앱, lifespan (NATS 초기화/종료), 헬스체크
@@ -520,6 +535,7 @@ services/order-service/
 │       └── order_service.py  # Saga 오케스트레이션 비즈니스 로직
 ├── tests/
 ├── .env.example
+├── alembic.ini
 ├── pytest.ini
 └── requirements.txt
 ```

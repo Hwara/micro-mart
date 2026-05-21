@@ -23,11 +23,15 @@ def test_initial_revision_documents_products_table() -> None:
     versions_dir = SERVICE_DIR / "alembic" / "versions"
     revision_files = list(versions_dir.glob("*.py"))
 
-    assert len(revision_files) == 1
+    revision_file = next(
+        (path for path in revision_files if "create_products_table" in path.name),
+        None,
+    )
 
-    revision_text = revision_files[0].read_text(encoding="utf-8")
+    assert revision_file is not None
 
-    assert "create_products_table" in revision_files[0].name
+    revision_text = revision_file.read_text(encoding="utf-8")
+
     assert "op.create_table(" in revision_text
     assert '"products"' in revision_text
     assert 'sa.CheckConstraint("stock >= 0", name="ck_products_stock_nonnegative")' in revision_text
@@ -35,3 +39,12 @@ def test_initial_revision_documents_products_table() -> None:
         'op.create_index("ix_products_name", "products", ["name"], unique=False)' in revision_text
     )
     assert 'op.drop_table("products")' in revision_text
+
+
+def test_alembic_env_requires_database_url() -> None:
+    """Alembic should fail fast instead of silently targeting a default DB."""
+    env_text = SERVICE_DIR.joinpath("alembic", "env.py").read_text(encoding="utf-8")
+
+    assert "DEFAULT_DATABASE_URL" not in env_text
+    assert 'os.environ.get("DATABASE_URL")' in env_text
+    assert "raise RuntimeError" in env_text

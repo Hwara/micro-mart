@@ -1,6 +1,6 @@
 # MicroMart — AI 개발 컨벤션 가이드
 
-> 최종 갱신일: 2026-05-11
+> 최종 갱신일: 2026-05-21
 > 목적: MicroMart 프로젝트에서 AI/개발자가 일관된 구조와 규칙으로 코드를 작성하도록 하는 기준 문서
 
 ---
@@ -67,12 +67,18 @@ services/<service-name>/
 │   ├── services/
 │   ├── routes/
 │   └── middleware/
+├── alembic.ini     # DB를 보유한 서비스의 Alembic 설정
+├── alembic/        # DB를 보유한 서비스의 migration history
+│   ├── env.py
+│   └── versions/
 ├── Dockerfile
 ├── .env.example
 ├── pytest.ini    # 테스트가 있는 서비스
 ├── tests/        # 테스트가 있는 서비스
 └── requirements.txt
 ```
+
+> DB가 없는 서비스(`api-gateway`, `notification-service`)는 `alembic.ini`와 `alembic/`을 두지 않는다.
 
 ### 서비스별 추가 모듈 예시
 
@@ -98,6 +104,9 @@ services/<service-name>/
 | `database.py` | SQLAlchemy async engine, sessionmaker, DB 의존성 |
 | `models.py` | SQLAlchemy ORM 모델 |
 | `schemas.py` | Pydantic request/response 모델 |
+| `alembic.ini` | 서비스별 Alembic 설정, migration script 위치 지정 |
+| `alembic/env.py` | `DATABASE_URL`과 `Base.metadata`를 연결하는 migration 실행 환경 |
+| `alembic/versions/` | 서비스 DB schema 변경 이력을 담는 revision 파일 |
 | `dependencies.py` | 공통 Depends, 인증/헤더 검증 의존성 |
 | `services/` | 비즈니스 로직 분리 |
 | `routes/` | HTTP 라우터 정의 |
@@ -117,6 +126,7 @@ services/<service-name>/
   - 예: user-service의 `redis`, `passlib`, `python-jose`
   - 예: product-service의 `redis`
   - 예: order-service의 `nats-py`
+  - 예: DB 보유 서비스의 `alembic`
 - 새 의존성을 추가할 때는 먼저 `constraints.txt`에 버전을 고정한 뒤, 필요한 common 또는 서비스별 requirements에 이름만 추가한다.
 - Dockerfile에서는 레포 루트의 `requirements/` 디렉터리를 먼저 복사한 뒤 서비스별 requirements를 설치한다.
 - 버전 업그레이드가 발생하면 `docs/micromart_design.md`의 기술 스택 표와 관련 References 문서를 함께 갱신한다.
@@ -189,6 +199,15 @@ def get_settings() -> Settings:
 
   > 현재 Redis 사용 서비스: `user-service`, `product-service`
   > Redis 미사용 서비스: `order-service`, `payment-service`, `notification-service`
+
+### Alembic migration 규칙
+
+- PostgreSQL DB를 보유한 서비스(`user-service`, `product-service`, `order-service`, `payment-service`)는 서비스별 `alembic.ini`와 `alembic/` 디렉터리를 둔다.
+- Alembic history는 전역으로 합치지 않는다. 각 서비스 DB는 독립적인 `alembic_version` 테이블을 가진다.
+- Alembic `env.py`는 migration에 필요한 `DATABASE_URL`과 `app.models.Base.metadata`만 사용한다. JWT key, Redis, `INTERNAL_SERVICE_TOKEN` 같은 런타임 설정 검증에 migration 실행이 묶이지 않게 한다.
+- 서비스 코드가 `postgresql+asyncpg://` URL을 사용하므로 Alembic도 SQLAlchemy async migration 패턴을 사용한다.
+- `Base.metadata.create_all()`은 debug/test 편의용으로만 사용하고, 실제 schema 이력 관리는 Alembic revision으로 남긴다.
+- 이미 `create_all()`로 테이블이 생성된 DB에 첫 migration을 적용할 때는 `upgrade head`가 중복 테이블 오류를 낼 수 있다. 기존 schema가 revision과 동일한지 확인한 뒤 `stamp head`를 쓰거나, 빈 DB에서 migration을 적용한다.
 
 예시:
 
