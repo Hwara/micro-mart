@@ -48,11 +48,53 @@ helm repo add prometheus-community https://prometheus-community.github.io/helm-c
 helm repo update
 ```
 
+Slack 알림 webhook 준비:
+
+```bash
+mkdir -p k8s/observability/secrets
+cp k8s/observability/secrets/slack-webhook-url.txt.example k8s/observability/secrets/slack-webhook-url.txt
+```
+
+`k8s/observability/secrets/slack-webhook-url.txt`에는 Slack Incoming Webhook URL 한 줄만 넣는다.
+이 파일은 Git에 커밋하지 않는다.
+
 설치/업그레이드:
 
 ```bash
-helm upgrade --install prometheus prometheus-community/prometheus -n monitoring -f k8s/observability/prometheus-values.yaml
+helm upgrade --install prometheus prometheus-community/prometheus -n monitoring -f k8s/observability/prometheus-values.yaml --set-file alertmanager.config.global.slack_api_url=k8s/observability/secrets/slack-webhook-url.txt
 ```
+
+렌더링 검증:
+
+```bash
+helm template prometheus prometheus-community/prometheus -n monitoring -f k8s/observability/prometheus-values.yaml --set-file alertmanager.config.global.slack_api_url=k8s/observability/secrets/slack-webhook-url.txt
+```
+
+Prometheus / Alertmanager 상태 확인:
+
+```bash
+kubectl get pods -n monitoring
+kubectl port-forward -n monitoring svc/prometheus-server 9090:9090
+kubectl port-forward -n monitoring svc/prometheus-alertmanager 9093:9093
+```
+
+Prometheus UI에서는 `Status > Rules`에서 `micromart.phase13.alerts` 그룹을 확인한다.
+Alertmanager UI에서는 firing/resolved 알림이 Slack receiver로 라우팅되는지 확인한다.
+
+수동 트리거 시나리오:
+
+```bash
+# 결제 지연 / 결제 실패율
+k6 run k6/scenarios/payment_latency_chaos_order_flow.js
+k6 run k6/scenarios/payment_failure_chaos_order_flow.js
+
+# Rate Limit
+k6 run k6/scenarios/auth_rate_limit_flow.js
+```
+
+notification 실패 알림은 `NOTIFICATION_FAILURE_RATE`를 높인 뒤 주문 완료 이벤트를 발생시켜 확인한다.
+NATS 연결 끊김은 현재 Prometheus metric이 없으므로 notification-service `/health`의
+`nats_connected=false`와 Loki warning 로그로 확인한다.
 
 ### Grafana
 

@@ -592,8 +592,8 @@ Phase 13~16은 로컬 Kubernetes 구현을 운영 학습 환경으로 확장하�
   넣지 않는다.
 - 알림 기준은 장애 학습 시나리오와 연결한다. 예: 결제 p99 지연, 결제 실패율, gateway 5xx,
   rate limit 급증, notification 실패, NATS 연결 끊김, OTel 수집 중단.
-- Alertmanager receiver는 로컬 학습 환경에서는 webhook 또는 null receiver처럼 안전한 대상으로
-  시작하고, 실제 메신저/메일 연동은 별도 phase에서 다룬다.
+- Alertmanager receiver는 Phase 13 기준 Slack Incoming Webhook을 사용한다. 실제 webhook URL은
+  Git에 커밋하지 않고 Helm 배포 시 `--set-file`로 주입한다.
 
 ### CI workflow 규칙
 
