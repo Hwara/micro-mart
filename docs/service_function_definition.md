@@ -798,7 +798,8 @@ Phase 13~16은 애플리케이션 엔드포인트를 추가하지 않고, 현재
 
 Prometheus Alertmanager와 Grafana/Loki 알림 규칙은 MicroMart의 장애 학습 시나리오를 실제 운영
 신호로 바꾸는 역할을 한다. 알림은 새 비즈니스 API를 만들지 않고 기존 OpenTelemetry 메트릭,
-구조화 로그, Kubernetes 상태를 기준으로 판단한다.
+구조화 로그, Kubernetes 상태를 기준으로 판단한다. 로컬 학습 환경에서는 빠른 피드백을 위해
+대부분의 알림을 `for: 1m`으로 두고, Alertmanager Slack receiver의 `group_wait`도 10초로 줄인다.
 
 #### 알림 대상
 
@@ -807,14 +808,21 @@ Prometheus Alertmanager와 Grafana/Loki 알림 규칙은 MicroMart의 장애 학
 | 결제 지연 | `payment_processing_latency_ms` p99 | 결제 서비스 지연과 주문 전체 지연의 상관관계 확인 |
 | 결제 실패율 | `payment_rejected_total` / `payment_total` | Chaos Mode 또는 결제 장애 감지 |
 | gateway 5xx | `gateway_requests_total{status_code=~"5.."}` | 외부 진입점 장애 감지 |
+| gateway 지연/인증 | `gateway_request_duration_ms`, `gateway_auth_failure_total`, `gateway_auth_total` | 외부 진입점 지연, JWT 실패율, JWKS 장애 감지 |
 | Rate Limit 급증 | `gateway_rate_limit_total` | 비정상 고빈도 요청 감지 |
-| notification 실패 | `notification_send_failed_total` | 이벤트 소비/알림 처리 실패 감지 |
+| 주문 실패/완료율 | `order_failed_total`, `order_completed_total`, `order_created_total` | 핵심 주문 플로우 실패율과 완료율 저하 감지 |
+| Saga 보상 증가 | `saga_stock_rollback_total` | 결제 실패 또는 Saga 불안정에 따른 재고 롤백 증가 감지 |
+| 상품 재고 경합 | `product_stock_conflict_total` | 낙관적 잠금 충돌과 특정 상품 주문 경합 감지 |
+| 상품 캐시 효율 저하 | `product_cache_hits_total`, `product_cache_misses_total` | Redis cache-aside 효과 저하와 DB 부하 증가 가능성 감지 |
+| notification 실패/지연 | `notification_send_failed_total`, `notification_processing_latency_ms` | 이벤트 소비/알림 처리 실패와 지연 감지 |
 | NATS 연결 끊김 | `notification-service /health.nats_connected=false` 또는 관련 로그 | 비동기 이벤트 소비 불가 감지 |
-| OTel 수집 중단 | 서비스 메트릭/로그/트레이스 유입 중단 | 관찰성 파이프라인 장애 감지 |
+| OTel 수집 중단 | `absent_over_time()` 기반 서비스 핵심 메트릭 미수집 | 관찰성 파이프라인 장애 감지 |
 
 #### 설계 의도
 
 - 알림 레이블에는 `order_id`, `user_id`, `payment_id` 같은 고카디널리티 값을 넣지 않는다.
+- Alertmanager receiver는 Slack Incoming Webhook을 사용한다. 실제 webhook URL은 Git에 커밋하지
+  않고 Helm 배포 시 `--set-file alertmanager.config.global.slack_api_url=...`로 주입한다.
 - 알림은 `docs/references/alerting-reference.md`에 임계값, receiver, troubleshooting 기준을 남긴다.
 - 운영자 UI는 Grafana를 사용하되, 알림 판정의 기준은 Prometheus/Alertmanager 규칙으로 둔다.
 

@@ -591,9 +591,13 @@ Phase 13~16은 로컬 Kubernetes 구현을 운영 학습 환경으로 확장하�
 - 알림 레이블에는 `order_id`, `user_id`, `payment_id`, raw token 같은 고카디널리티 또는 민감값을
   넣지 않는다.
 - 알림 기준은 장애 학습 시나리오와 연결한다. 예: 결제 p99 지연, 결제 실패율, gateway 5xx,
-  rate limit 급증, notification 실패, NATS 연결 끊김, OTel 수집 중단.
+  gateway 인증 실패, rate limit 급증, 주문 실패율/완료율, Saga 보상 증가, 상품 재고 경합,
+  캐시 미스율 증가, notification 실패, NATS 연결 끊김, OTel 수집 중단.
 - Alertmanager receiver는 Phase 13 기준 Slack Incoming Webhook을 사용한다. 실제 webhook URL은
   Git에 커밋하지 않고 Helm 배포 시 `--set-file`로 주입한다.
+- 현재 `k8s/observability/prometheus-values.yaml`은 로컬 학습 환경 기준이므로 대부분의 alert `for`는
+  `1m`, Alertmanager `group_wait`은 `10s`, `repeat_interval`은 `10m`처럼 짧게 둔다. staging/prod
+  환경 values를 만들 때는 일시적 배포와 scrape 지연을 흡수하도록 더 긴 값을 사용한다.
 
 ### CI workflow 규칙
 

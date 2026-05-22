@@ -373,11 +373,13 @@ log는 Loki OTLP endpoint로 전달한다. Grafana는 Prometheus, Loki, Tempo da
 ### Alerting / Delivery / Cloud 확장 방향
 
 Phase 13 이후의 운영 확장은 애플리케이션 API를 늘리는 대신 배포와 관찰성 경계를 강화한다.
-Alertmanager는 Prometheus 알림 규칙을 받아 결제 지연, 실패율, gateway 5xx, rate limit 급증,
-notification 실패, NATS 연결 끊김, OTel 수집 중단을 알린다. GitHub Actions는 테스트와 이미지
-빌드 검증을 담당하고, Argo CD는 Git에 선언된 Kubernetes overlay를 클러스터 상태와 동기화한다.
-AWS 배포는 Terraform으로 VPC, EKS, RDS PostgreSQL, ElastiCache Redis, Secret 관리, Terraform
-remote backend를 구성하는 학습용 최소형 EKS 아키텍처를 기본값으로 한다.
+Alertmanager는 Prometheus 알림 규칙을 받아 결제 지연/실패율, gateway 5xx와 인증 실패, rate
+limit 급증, 주문 실패율과 완료율 저하, Saga 보상 트랜잭션 증가, 상품 재고 경합, 캐시 미스율 증가,
+notification 실패/지연, OTel 수집 중단을 Slack으로 알린다. NATS 연결 끊김은 현재 별도 Prometheus
+metric 없이 notification-service `/health.nats_connected=false`와 Loki warning 로그로 확인한다.
+GitHub Actions는 테스트와 이미지 빌드 검증을 담당하고, Argo CD는 Git에 선언된 Kubernetes overlay를
+클러스터 상태와 동기화한다. AWS 배포는 Terraform으로 VPC, EKS, RDS PostgreSQL, ElastiCache Redis,
+Secret 관리, Terraform remote backend를 구성하는 학습용 최소형 EKS 아키텍처를 기본값으로 한다.
 
 ### Loki 로그 필드
 
@@ -417,7 +419,7 @@ remote backend를 구성하는 학습용 최소형 EKS 아키텍처를 기본값
 | Rate Limit 발동 | 고빈도 요청 | `gateway_rate_limit_total` + 429 응답율 급등 |
 | JWT 위조/만료 | 잘못된 토큰 전달 | `gateway_auth_failure_total{reason="expired\|invalid"}` |
 | JWKS 캐시 미스 | user-service 재기동 또는 키 로테이션 | `gateway_jwks_cache_total{result="miss"}` 증가 |
-| 알럿 발동 | 결제 지연/실패율, gateway 5xx, notification 실패, NATS 단절 | Prometheus alert rule → Alertmanager receiver → Grafana 대시보드 패널 확인 |
+| 알럿 발동 | 결제 지연/실패율, gateway 5xx/인증 실패, 주문 실패율/완료율, 재고 경합, 캐시 미스율, notification 실패, OTel 수집 중단 | Prometheus alert rule → Alertmanager Slack receiver → Grafana 대시보드 패널 확인 |
 | CI 실패 | 테스트 실패, 버전 pin 누락, Docker build 실패, kustomize build 실패 | GitHub Actions job 로그와 실패 단계 확인 |
 | GitOps sync drift | 클러스터에서 수동으로 Deployment/ConfigMap 변경 | Argo CD OutOfSync 상태와 diff 확인 후 Git 기준으로 복구 |
 | AWS 배포 관찰 | Terraform으로 EKS/RDS/ElastiCache 배포 후 서비스 트래픽 발생 | CloudWatch/EKS 상태, Grafana 대시보드, 서비스 health probe 확인 |
@@ -693,7 +695,7 @@ micro-mart/
 10. ✅ **k6 부하 스크립트** — Kubernetes local baseline 주문 생성 부하 시나리오 추가
 11. ✅ **Kubernetes 외부 노출** — MetalLB, Envoy Gateway, Gateway API로 api-gateway와 Grafana 노출
 12. ✅ **서비스별 DB 마이그레이션** — user/product/order/payment-service에 Alembic 초기 revision 추가
-13. ⏳ **Alerting 알림** — Prometheus Alertmanager와 Grafana/Loki 알림 규칙 정의
+13. ✅ **Alerting 알림** — Prometheus alert rule, Alertmanager Slack receiver, 로컬 학습용 빠른 감지 기준 정의
 14. ⏳ **CI** — GitHub Actions 기반 문서/의존성/테스트/이미지/Kustomize 검증 자동화
 15. ⏳ **GitOps 중심 CD** — Argo CD가 Git의 Kubernetes overlay를 클러스터에 동기화
 16. ⏳ **AWS Cloud + Terraform** — 학습용 최소형 EKS, RDS, ElastiCache, Secret, remote backend 설계 및 배포
