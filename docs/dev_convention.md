@@ -577,7 +577,67 @@ resources:
 
 ---
 
-## 21. 문서 동기화 규칙
+## 21. 운영 / 배포 확장 규칙
+
+Phase 13~16은 로컬 Kubernetes 구현을 운영 학습 환경으로 확장하는 단계다. 로컬 실행 규칙은
+`## 20. Docker Compose / Kubernetes 로컬 실행 규칙`을 기준으로 유지하고, CI/GitOps/AWS 규칙은
+아래 기준을 따른다.
+
+### Alerting 규칙
+
+- Alertmanager는 Prometheus 알림 규칙의 receiver 역할을 담당한다.
+- 알림 규칙은 기존 서비스 메트릭을 우선 사용한다. 새 메트릭이 필요하면 해당 서비스 구현 문서와
+  References 문서에 먼저 이름, 타입, 레이블을 정의한다.
+- 알림 레이블에는 `order_id`, `user_id`, `payment_id`, raw token 같은 고카디널리티 또는 민감값을
+  넣지 않는다.
+- 알림 기준은 장애 학습 시나리오와 연결한다. 예: 결제 p99 지연, 결제 실패율, gateway 5xx,
+  rate limit 급증, notification 실패, NATS 연결 끊김, OTel 수집 중단.
+- Alertmanager receiver는 로컬 학습 환경에서는 webhook 또는 null receiver처럼 안전한 대상으로
+  시작하고, 실제 메신저/메일 연동은 별도 phase에서 다룬다.
+
+### CI workflow 규칙
+
+- GitHub Actions workflow는 `.github/workflows/` 아래에 둔다.
+- PR 기준 CI는 최소한 의존성 pin 검증, 서비스별 pytest, 정적 검사, Docker build 검증,
+  `kustomize build` 검증을 포함한다.
+- CI는 클러스터에 직접 배포하지 않는다. `kubectl apply`, Helm upgrade, Argo CD sync 실행은
+  GitOps phase의 명시적 배포 흐름에서만 다룬다.
+- 서비스별 테스트는 실제 `services/<service-name>/tests/`가 있는 서비스만 실행한다. 테스트가 없는
+  서비스는 CI에서 실패시키지 말고, References 문서에 테스트 공백으로 기록한다.
+- Python 버전은 프로젝트 기준인 3.12를 사용한다.
+- Docker build는 레포 루트를 build context로 사용한다.
+- workflow가 민감값을 필요로 하면 GitHub Actions secrets를 사용하고, secret 값을 로그에 출력하지
+  않는다.
+
+### GitOps / CD 규칙
+
+- CD의 기준 상태는 클러스터가 아니라 Git repository다.
+- Argo CD Application은 환경별 overlay를 바라본다. local, staging, prod가 생기면 각각 별도 overlay와
+  Application으로 분리한다.
+- CI는 이미지 빌드/푸시와 manifest image tag 갱신까지만 담당한다. 실제 동기화는 Argo CD가 수행한다.
+- 수동으로 클러스터 리소스를 수정해 drift가 생기면 Argo CD diff를 확인하고 Git 기준으로 복구한다.
+- 내부 전용 서비스와 내부 API는 GitOps 배포 후에도 Gateway API나 LoadBalancer로 직접 노출하지 않는다.
+- secret manifest 원본은 Git에 커밋하지 않는다. Git에는 `.example`, sealed secret, external secret
+  정의처럼 원문 secret이 없는 자료만 남긴다.
+
+### AWS / Terraform 규칙
+
+- Terraform 코드는 향후 `infra/terraform/` 아래에 환경별 root module과 재사용 module을 분리해 둔다.
+- Terraform state는 로컬 파일이 아니라 S3 backend와 DynamoDB lock을 기본으로 설계한다.
+- AWS 배포 기본값은 학습용 최소형 EKS다. 운영형 HA, 멀티 리전, 고급 백업 정책은 별도 phase에서
+  다룬다.
+- Terraform은 VPC, EKS, RDS PostgreSQL, ElastiCache Redis, IAM/IRSA, Secrets Manager, remote backend
+  같은 클라우드 인프라를 관리한다.
+- 애플리케이션 manifest 배포는 Terraform이 아니라 GitOps가 담당한다.
+- AWS secret, DB password, JWT private key, internal token은 Terraform 코드나 tfvars에 평문으로
+  커밋하지 않는다.
+- RDS에서도 서비스별 DB 분리 원칙을 유지하고, 서비스 코드가 다른 서비스 DB에 직접 접근하지 않게 한다.
+- EKS 외부 노출은 AWS Load Balancer Controller 또는 Gateway API 연계를 사용하되, 외부 애플리케이션
+  트래픽은 계속 `api-gateway` 단일 진입점으로 제한한다.
+
+---
+
+## 22. 문서 동기화 규칙
 
 다음 변경이 발생하면 관련 문서를 함께 갱신한다.
 
@@ -585,12 +645,14 @@ resources:
 - 엔드포인트/호출 흐름 변경 → `service_function_definition.md`
 - 아키텍처/구현 현황 변경 → `README.md`, `micromart_design.md`
 - 공통 코드 작성 방식 변경 → `dev_convention.md`
+- Alerting/CI/GitOps/AWS phase 변경 → `micromart_design.md`, `service_function_definition.md`,
+  `dev_convention.md`
 
 > ⚠️ 새 서비스의 `routes`, `schemas`, 내부/외부 호출 로직을 작성하기 전에 반드시 `service_function_definition.md`를 먼저 확인한다.
 
 ---
 
-## 22. 커밋 / 작업 규칙
+## 23. 커밋 / 작업 규칙
 
 - 자동 커밋하지 않는다.
 - 의미 없는 대규모 리팩터링을 한 번에 진행하지 않는다.
@@ -599,7 +661,7 @@ resources:
 
 ---
 
-## 23. 체크리스트
+## 24. 체크리스트
 
 새 서비스 또는 새 기능 구현 전 아래 항목을 확인한다.
 

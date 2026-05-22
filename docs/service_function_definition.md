@@ -785,10 +785,121 @@ Body:
 
 ---
 
-## 6. 문서 운영 원칙
+## 6. 운영 / 배포 기능 정의
+
+Phase 13~16은 애플리케이션 엔드포인트를 추가하지 않고, 현재 서비스 API와 Kubernetes manifest를
+운영 가능한 형태로 검증·배포·관찰하는 범위를 다룬다. 외부 트래픽은 계속 `api-gateway`만 통과해야
+하며, `payment-service`, `product-service` 내부 재고 API, `notification-service` 같은 내부 전용
+서비스는 직접 외부 노출하지 않는다.
+
+### 6.1 Phase 13 — Alerting 알림
+
+#### 역할
+
+Prometheus Alertmanager와 Grafana/Loki 알림 규칙은 MicroMart의 장애 학습 시나리오를 실제 운영
+신호로 바꾸는 역할을 한다. 알림은 새 비즈니스 API를 만들지 않고 기존 OpenTelemetry 메트릭,
+구조화 로그, Kubernetes 상태를 기준으로 판단한다.
+
+#### 알림 대상
+
+| 대상 | 기준 신호 | 의도 |
+| ---- | --------- | ---- |
+| 결제 지연 | `payment_processing_latency_ms` p99 | 결제 서비스 지연과 주문 전체 지연의 상관관계 확인 |
+| 결제 실패율 | `payment_rejected_total` / `payment_total` | Chaos Mode 또는 결제 장애 감지 |
+| gateway 5xx | `gateway_requests_total{status_code=~"5.."}` | 외부 진입점 장애 감지 |
+| Rate Limit 급증 | `gateway_rate_limit_total` | 비정상 고빈도 요청 감지 |
+| notification 실패 | `notification_send_failed_total` | 이벤트 소비/알림 처리 실패 감지 |
+| NATS 연결 끊김 | `notification-service /health.nats_connected=false` 또는 관련 로그 | 비동기 이벤트 소비 불가 감지 |
+| OTel 수집 중단 | 서비스 메트릭/로그/트레이스 유입 중단 | 관찰성 파이프라인 장애 감지 |
+
+#### 설계 의도
+
+- 알림 레이블에는 `order_id`, `user_id`, `payment_id` 같은 고카디널리티 값을 넣지 않는다.
+- 알림은 `docs/references/alerting-reference.md`에 임계값, receiver, troubleshooting 기준을 남긴다.
+- 운영자 UI는 Grafana를 사용하되, 알림 판정의 기준은 Prometheus/Alertmanager 규칙으로 둔다.
+
+### 6.2 Phase 14 — CI
+
+#### 역할
+
+GitHub Actions CI는 PR 단계에서 문서, 의존성 pin, Python 테스트, 정적 검사, Docker build,
+Kubernetes manifest 조합 가능성을 검증한다. CI는 클러스터에 직접 배포하지 않는다.
+
+#### 검증 범위
+
+| 범위 | 기준 |
+| ---- | ---- |
+| 의존성 | `requirements/constraints.txt`의 모든 패키지 버전 pin 검증 |
+| Python 서비스 | 서비스별 `tests/`가 있는 경우 pytest 실행 |
+| 정적 검사 | 루트 `pyproject.toml` 기준 Ruff/Black/mypy 적용 |
+| Docker build | 서비스별 Dockerfile이 레포 루트 build context에서 빌드 가능한지 확인 |
+| Kubernetes | `kustomize build k8s/services/overlays/local` 조합 확인 |
+
+#### 설계 의도
+
+- 기존 `validate-pinned-versions.yml`은 유지하거나 확장하되, workflow 책임이 커지면 파일을 분리한다.
+- CI 실패 원인과 재현 명령은 `docs/references/ci-reference.md`에 기록한다.
+- CI는 배포 권한을 갖지 않으며, 배포는 Phase 15의 GitOps 경로에서 처리한다.
+
+### 6.3 Phase 15 — GitOps 중심 CD
+
+#### 역할
+
+Argo CD는 Git에 선언된 Kubernetes overlay를 클러스터의 실제 상태와 동기화한다. GitHub Actions는
+이미지 빌드와 태그 갱신까지만 담당하고, `kubectl apply` 또는 Helm 직접 배포는 CI에서 수행하지
+않는다.
+
+#### 배포 흐름
+
+```text
+Pull Request → CI 검증 → merge
+→ GitHub Actions 이미지 빌드/푸시
+→ Kubernetes overlay image tag 갱신 commit
+→ Argo CD Application sync
+→ EKS 또는 local Kubernetes에 배포
+```
+
+#### 설계 의도
+
+- 배포 기준은 클러스터 명령 이력이 아니라 Git 이력이다.
+- local/staging/prod overlay를 분리해 환경별 ConfigMap, Secret, image tag, resource 정책을 관리한다.
+- sync drift가 발생하면 Argo CD diff로 원인을 확인하고 Git 기준 상태로 복구한다.
+- 내부 전용 서비스는 GitOps 배포 후에도 Gateway API로 직접 노출하지 않는다.
+
+### 6.4 Phase 16 — AWS Cloud Architecture + Terraform
+
+#### 역할
+
+Terraform은 학습용 최소형 AWS EKS 환경을 재현 가능하게 만든다. 애플리케이션 서비스는 Kubernetes
+manifest와 GitOps 흐름을 유지하고, 클라우드 리소스는 Terraform state로 관리한다.
+
+#### 기본 구성
+
+| 구성 | 기본 선택 |
+| ---- | --------- |
+| Kubernetes | EKS + managed node group |
+| 네트워크 | VPC, public/private subnet, NAT 구성은 비용을 고려해 단계적으로 결정 |
+| DB | RDS PostgreSQL, 서비스별 database 분리 |
+| Redis | ElastiCache Redis |
+| 메시징 | NATS는 EKS 내부 workload로 배포 |
+| Secret | AWS Secrets Manager + External Secrets 또는 IRSA 기반 연동 |
+| Terraform state | S3 backend + DynamoDB lock |
+| 외부 노출 | AWS Load Balancer Controller 또는 Gateway API 연계 |
+
+#### 설계 의도
+
+- 운영형 HA보다 비용을 의식한 학습용 최소형 구성을 기본값으로 둔다.
+- Terraform은 인프라 리소스만 관리하고, 애플리케이션 배포는 Phase 15 GitOps가 담당한다.
+- cloud 배포 후에도 서비스 간 DB 공유 금지, 내부 API 직접 노출 금지, secret 하드코딩 금지 원칙을 유지한다.
+
+---
+
+## 7. 문서 운영 원칙
 
 - 구현 완료된 서비스는 실제 코드와 문서를 함께 갱신한다.
 - 예정 서비스는 엔드포인트 계약이 바뀌면 먼저 이 문서를 수정한다.
 - README는 요약본, 이 문서는 구현 기준서로 유지한다.
 - 이 문서는 구현 로드맵이 아니라 서비스 기능과 호출 계약의 기준서로 유지한다.
 - 코드 컨벤션 기준은 `dev_convention.md`를 따른다.
+- 운영/배포 phase는 애플리케이션 API 계약을 바꾸지 않으면 별도 운영 기능 섹션과 References 문서에
+  반영한다.

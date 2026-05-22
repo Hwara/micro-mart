@@ -42,8 +42,16 @@ flowchart LR
         OTEL["OTel Collector"]
         TEMPO["Tempo"]
         PROM["Prometheus"]
+        ALERT["Alertmanager"]
         LOKI["Loki"]
         GRAF["Grafana"]
+    end
+
+    subgraph DELIVERY["Delivery / Cloud"]
+        GHA["GitHub Actions"]
+        ARGO["Argo CD"]
+        TF["Terraform"]
+        AWS["AWS EKS"]
     end
 
     K6 --> GW
@@ -54,7 +62,11 @@ flowchart LR
     NATS --> NS
     SERVICES -- OTLP --> OTEL
     OTEL --> TEMPO & PROM & LOKI
+    PROM --> ALERT
     TEMPO & PROM & LOKI --> GRAF
+    GHA --> ARGO
+    ARGO --> AWS
+    TF --> AWS
 ```
 
 ## 서비스 구성
@@ -164,3 +176,7 @@ micro-mart/
 | Kubernetes 매니페스트 | 완료 |
 | k6 부하 스크립트 | 완료 |
 | 서비스별 Alembic migration | 완료 |
+| Alerting 알림 | 예정 |
+| CI | 예정 |
+| GitOps 중심 CD | 예정 |
+| AWS Cloud + Terraform | 예정 |
