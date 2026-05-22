@@ -10,8 +10,289 @@ server:
   retentionSize: "1500MB"
   persistentVolume:
     size: 2Gi
+serverFiles:
+  alerting_rules.yml:
+    groups:
+      - name: micromart.phase13.alerts
+        rules:
+          - alert: PaymentP99LatencyHigh
+            expr: |
+              histogram_quantile(
+                0.99,
+                sum by (le) (rate(payment_processing_latency_ms_milliseconds_bucket[5m]))
+              ) > 3000
+            for: 1m
+            labels:
+              severity: warning
+              service: payment-service
+              category: latency
+            annotations:
+              summary: "payment-service p99 latency is high"
+              description: "Payment processing p99 latency has stayed above 3000 ms for 1 minutes."
+
+          - alert: PaymentFailureRateHigh
+            expr: |
+              (
+                sum(rate(payment_rejected_total[5m]))
+                /
+                clamp_min(sum(rate(payment_total[5m])), 1e-6)
+              ) > 0.2
+              and sum(rate(payment_total[5m])) > 0
+            for: 1m
+            labels:
+              severity: critical
+              service: payment-service
+              category: failure-rate
+            annotations:
+              summary: "payment-service rejection rate is high"
+              description: "More than 20% of payment requests have been rejected for 1 minutes."
+
+          - alert: GatewayP95LatencyHigh
+            expr: |
+              histogram_quantile(
+                0.95,
+                sum by (le) (rate(gateway_request_duration_ms_milliseconds_bucket[5m]))
+              ) > 1000
+            for: 1m
+            labels:
+              severity: warning
+              service: api-gateway
+              category: latency
+            annotations:
+              summary: "api-gateway p95 latency is high"
+              description: "Gateway request p95 latency over the last 5 minutes is above 1000 ms."
+
+          - alert: Gateway5xxRateHigh
+            expr: |
+              (
+                sum(rate(gateway_requests_total{status_code=~"5.."}[5m]))
+                /
+                clamp_min(sum(rate(gateway_requests_total[5m])), 1e-6)
+              ) > 0.05
+              and sum(rate(gateway_requests_total[5m])) > 0
+            for: 1m
+            labels:
+              severity: critical
+              service: api-gateway
+              category: availability
+            annotations:
+              summary: "api-gateway 5xx rate is high"
+              description: "More than 5% of gateway requests have returned 5xx responses for 1 minutes."
+
+          - alert: GatewayRateLimitSpike
+            expr: |
+              sum(rate(gateway_rate_limit_total[5m])) > 0.1
+            for: 1m
+            labels:
+              severity: warning
+              service: api-gateway
+              category: traffic
+            annotations:
+              summary: "api-gateway rate limit events increased"
+              description: "Gateway rate limit events have exceeded the local learning threshold for 1 minutes."
+
+          - alert: GatewayAuthFailureSpike
+            expr: |
+              (
+                sum(rate(gateway_auth_failure_total[5m]))
+                /
+                clamp_min(sum(rate(gateway_auth_total[5m])), 1e-6)
+              ) > 0.2
+              and sum(rate(gateway_auth_total[5m])) > 0
+            for: 1m
+            labels:
+              severity: warning
+              service: api-gateway
+              category: security
+            annotations:
+              summary: "api-gateway authentication failures increased"
+              description: "More than 20% of gateway authentication attempts have failed for 1 minutes."
+
+          - alert: GatewayJWKSFailureSpike
+            expr: |
+              sum(rate(gateway_auth_failure_total{reason="jwks_error"}[5m])) > 0
+            for: 1m
+            labels:
+              severity: critical
+              service: api-gateway
+              category: authentication
+            annotations:
+              summary: "api-gateway JWKS validation failures detected"
+              description: "Gateway JWT verification is failing because JWKS lookup or key validation has errors."
+
+          - alert: OrderFailureRateHigh
+            expr: |
+              (
+                sum(rate(order_failed_total[5m]))
+                /
+                clamp_min(sum(rate(order_created_total[5m])), 1e-6)
+              ) > 0.1
+              and sum(rate(order_created_total[5m])) > 0
+            for: 1m
+            labels:
+              severity: critical
+              service: order-service
+              category: failure-rate
+            annotations:
+              summary: "order-service failure rate is high"
+              description: "More than 10% of order creation attempts have failed for 1 minutes."
+
+          - alert: OrderCompletionDrop
+            expr: |
+              (
+                sum(rate(order_completed_total[10m]))
+                /
+                clamp_min(sum(rate(order_created_total[10m])), 1e-6)
+              ) < 0.8
+              and sum(rate(order_created_total[10m])) > 0
+            for: 2m
+            labels:
+              severity: critical
+              service: order-service
+              category: completion
+            annotations:
+              summary: "order-service completion ratio dropped"
+              description: "Less than 80% of created orders have completed over the last 2 minutes."
+
+          - alert: SagaRollbackSpike
+            expr: |
+              sum(rate(saga_stock_rollback_total[5m])) > 0.05
+            for: 1m
+            labels:
+              severity: warning
+              service: order-service
+              category: consistency
+            annotations:
+              summary: "order-service saga rollback activity increased"
+              description: "Stock rollback compensation has increased, which can indicate payment failures or saga instability."
+
+          - alert: ProductStockConflictSpike
+            expr: |
+              sum(rate(product_stock_conflict_total[5m])) > 0.1
+            for: 1m
+            labels:
+              severity: warning
+              service: product-service
+              category: concurrency
+            annotations:
+              summary: "product-service optimistic lock conflicts increased"
+              description: "Stock deduction version conflicts have exceeded the local threshold for 1 minutes."
+
+          - alert: ProductCacheMissRateHigh
+            expr: |
+              (
+                sum(rate(product_cache_misses_total[10m]))
+                /
+                clamp_min(
+                  sum(rate(product_cache_hits_total[10m]))
+                  +
+                  sum(rate(product_cache_misses_total[10m])),
+                  1e-6
+                )
+              ) > 0.8
+              and (
+                sum(rate(product_cache_hits_total[10m]))
+                +
+                sum(rate(product_cache_misses_total[10m]))
+              ) > 0
+            for: 2m
+            labels:
+              severity: warning
+              service: product-service
+              category: cache
+            annotations:
+              summary: "product-service cache miss rate is high"
+              description: "More than 80% of product cache lookups have missed for 2 minutes."
+
+          - alert: NotificationSendFailures
+            expr: |
+              sum(rate(notification_send_failed_total[5m])) > 0
+            for: 1m
+            labels:
+              severity: warning
+              service: notification-service
+              category: failure-rate
+            annotations:
+              summary: "notification-service send failures detected"
+              description: "Notification send failures have been observed continuously for 1 minutes."
+
+          - alert: NotificationP95LatencyHigh
+            expr: |
+              histogram_quantile(
+                0.95,
+                sum by (le) (rate(notification_processing_latency_ms_milliseconds_bucket[5m]))
+              ) > 3000
+            for: 1m
+            labels:
+              severity: warning
+              service: notification-service
+              category: latency
+            annotations:
+              summary: "notification-service p95 processing latency is high"
+              description: "Notification processing p95 latency has stayed above 3000 ms for 1 minutes."
+
+          - alert: PaymentMetricsMissing
+            expr: absent_over_time(payment_total[3m])
+            for: 1m
+            labels:
+              severity: warning
+              service: payment-service
+              category: telemetry
+            annotations:
+              summary: "payment-service metrics are missing"
+              description: "Prometheus has not received payment_total for 3 minutes during the local alert evaluation window."
+
+          - alert: GatewayMetricsMissing
+            expr: absent_over_time(gateway_requests_total[3m])
+            for: 1m
+            labels:
+              severity: warning
+              service: api-gateway
+              category: telemetry
+            annotations:
+              summary: "api-gateway metrics are missing"
+              description: "Prometheus has not received gateway_requests_total for 3 minutes during the local alert evaluation window."
+
+          - alert: NotificationMetricsMissing
+            expr: absent_over_time(notification_message_consumed_total[3m])
+            for: 1m
+            labels:
+              severity: warning
+              service: notification-service
+              category: telemetry
+            annotations:
+              summary: "notification-service metrics are missing"
+              description: "Prometheus has not received notification_message_consumed_total for 3 minutes during the local alert evaluation window."
 alertmanager:
   enabled: true
+  config:
+    global:
+      resolve_timeout: 5m
+      slack_api_url: "REPLACE_WITH_SLACK_WEBHOOK_URL"
+    route:
+      receiver: slack-phase13
+      group_by:
+        - alertname
+        - service
+        - category
+      group_wait: 10s
+      group_interval: 1m
+      repeat_interval: 10m
+    receivers:
+      - name: slack-phase13
+        slack_configs:
+          - channel: "#micro-mart-alerts"
+            send_resolved: true
+            title: "{{ .Status | toUpper }} {{ .CommonLabels.alertname }}"
+            text: |-
+              {{ range .Alerts }}
+              *Alert:* {{ .Labels.alertname }}
+              *Service:* {{ .Labels.service }}
+              *Severity:* {{ .Labels.severity }}
+              *Category:* {{ .Labels.category }}
+              *Summary:* {{ .Annotations.summary }}
+              *Description:* {{ .Annotations.description }}
+              {{ end }}
   persistentVolume:
     enabled: true
     size: 256Mi
