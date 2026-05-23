@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import json
+import re
 import sys
 import urllib.error
 import urllib.request
 from pathlib import Path
+
+_PYPI_PROJECT_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*[A-Za-z0-9]$|^[A-Za-z0-9]$")
 
 
 def _iter_pins(path: Path):
@@ -28,9 +31,13 @@ def _iter_pins(path: Path):
 
 def _pypi_versions(package: str) -> set[str]:
     """Return all published versions for a package from the PyPI JSON API."""
+    if not _PYPI_PROJECT_NAME.fullmatch(package):
+        raise ValueError(f"invalid PyPI project name: {package}")
+
     url = f"https://pypi.org/pypi/{package}/json"
     request = urllib.request.Request(url, headers={"User-Agent": "micro-mart-pin-validator"})
-    with urllib.request.urlopen(request, timeout=15) as response:
+    # package is validated above and the endpoint is fixed to HTTPS PyPI.
+    with urllib.request.urlopen(request, timeout=15) as response:  # nosec B310
         payload = json.load(response)
     return set(payload.get("releases", {}))
 
@@ -52,6 +59,9 @@ def main() -> int:
             continue
         except urllib.error.URLError as exc:
             failures.append(f"{line_number}: {package}=={version} network error: {exc.reason}")
+            continue
+        except ValueError as exc:
+            failures.append(f"{line_number}: {package}=={version} {exc}")
             continue
 
         if version not in versions:
