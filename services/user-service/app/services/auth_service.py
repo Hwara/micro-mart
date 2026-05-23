@@ -1,6 +1,8 @@
 import base64
+from typing import cast
 
 import structlog
+from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicKey
 from cryptography.hazmat.primitives.serialization import load_pem_public_key
 from fastapi import HTTPException, status
 from jose import JWTError
@@ -196,12 +198,8 @@ def get_jwks_service() -> dict:
     """
     settings = get_settings()
 
-    public_key = load_pem_public_key(settings.jwt_public_key.encode())
-    pub_numbers = (
-        public_key.public_key().public_numbers()
-        if hasattr(public_key, "public_key")
-        else public_key.public_numbers()
-    )
+    public_key = cast(RSAPublicKey, load_pem_public_key(settings.jwt_public_key.encode()))
+    pub_numbers = public_key.public_numbers()
 
     def _int_to_base64url(n: int) -> str:
         byte_length = (n.bit_length() + 7) // 8

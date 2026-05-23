@@ -7,6 +7,7 @@ NATS 커넥션은 nats_client.py 싱글턴으로 관리.
 """
 
 from contextlib import asynccontextmanager
+from typing import Any
 
 import structlog
 from fastapi import FastAPI
@@ -47,10 +48,10 @@ async def lifespan(app: FastAPI):
 
     # 종료 시 NATS 정리
     logger.info("order-service 종료 시작")
-    nc = get_nats_client()
-    if nc and not nc.is_closed:
+    current_nc: Any | None = get_nats_client()
+    if current_nc and not current_nc.is_closed:
         try:
-            await nc.close()
+            await current_nc.close()
         except Exception as e:
             logger.warning("NATS 종료 중 오류", error=str(e))
     clear_nats_client()

@@ -6,7 +6,7 @@ SQLAlchemy 비동기 엔진과 세션 팩토리를 생성합니다.
 """
 
 from collections.abc import AsyncGenerator
-from typing import Annotated
+from typing import Annotated, Any
 
 import redis.asyncio as aioredis
 from fastapi import Depends
@@ -23,14 +23,14 @@ def _engine_options(
     debug: bool,
     pool_size: int,
     max_overflow: int,
-) -> dict:
+) -> dict[str, Any]:
     """
     SQLAlchemy async engine 옵션을 DB 드라이버에 맞게 구성한다.
 
     SQLite 테스트 엔진은 pool_size/max_overflow를 지원하지 않으므로 제외하고,
     PostgreSQL 운영/로컬 엔진에는 커넥션 풀 옵션을 유지한다.
     """
-    options = {
+    options: dict[str, Any] = {
         "echo": debug,
         "pool_pre_ping": True,
     }
