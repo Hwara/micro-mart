@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: read
+  pull-requests: read
 
 env:
   PYTHON_VERSION: "3.12"
@@ -82,7 +83,16 @@ jobs:
         run: black --check .
 
       - name: Run mypy smoke check
-        run: mypy --config-file pyproject.toml shared services/*/app
+        run: |
+          mypy --config-file pyproject.toml shared
+          for service_dir in services/*; do
+            if [ -d "$service_dir/app" ]; then
+              (
+                cd "$service_dir"
+                mypy --config-file ../../pyproject.toml app
+              )
+            fi
+          done
 
   docker-build:
     name: Docker build (${{ matrix.service }})
@@ -139,7 +149,7 @@ jobs:
       - name: Run Gitleaks secret scan
         uses: gitleaks/gitleaks-action@v2
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
           GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
 
       - name: Set up Python
