@@ -1,0 +1,183 @@
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - main
+      - "feat/**"
+
+permissions:
+  contents: read
+
+env:
+  PYTHON_VERSION: "3.12"
+
+jobs:
+  python-tests:
+    name: pytest (${{ matrix.service }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service:
+          - api-gateway
+          - user-service
+          - product-service
+          - order-service
+          - payment-service
+          - notification-service
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: |
+            requirements/*.txt
+            shared/telemetry/requirements.txt
+            services/${{ matrix.service }}/requirements.txt
+            services/${{ matrix.service }}/tests/requirements*.txt
+
+      - name: Install service and test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r services/${{ matrix.service }}/requirements.txt
+          python -m pip install -r requirements/test-common.txt pytest-mock respx
+          if [ -f services/${{ matrix.service }}/tests/requirements.txt ]; then
+            python -m pip install -r services/${{ matrix.service }}/tests/requirements.txt
+          fi
+          if [ -f services/${{ matrix.service }}/tests/requirements-test.txt ]; then
+            python -m pip install -r services/${{ matrix.service }}/tests/requirements-test.txt
+          fi
+
+      - name: Run pytest
+        working-directory: services/${{ matrix.service }}
+        run: pytest -q
+
+  static-checks:
+    name: Static checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install static analysis tools
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install ruff==0.4.4 black==24.4.2 mypy==1.10.0
+
+      - name: Run Ruff
+        run: ruff check .
+
+      - name: Run Black check
+        run: black --check .
+
+      - name: Run mypy smoke check
+        run: mypy --config-file pyproject.toml shared services/*/app
+
+  docker-build:
+    name: Docker build (${{ matrix.service }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service:
+          - api-gateway
+          - user-service
+          - product-service
+          - order-service
+          - payment-service
+          - notification-service
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Build service image
+        run: docker build -f services/${{ matrix.service }}/Dockerfile -t micro-mart/${{ matrix.service }}:ci .
+
+  kustomize-build:
+    name: Kustomize build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Kustomize
+        uses: imranismail/setup-kustomize@v2
+
+      - name: Create CI-only dummy Kubernetes secrets
+        run: |
+          for example_file in k8s/services/overlays/local/secrets/*.env.example; do
+            cp "$example_file" "${example_file%.example}"
+          done
+          mkdir -p k8s/services/overlays/local/secrets/keys
+          openssl genrsa -out k8s/services/overlays/local/secrets/keys/private.pem 2048
+          openssl rsa -in k8s/services/overlays/local/secrets/keys/private.pem \
+            -pubout -out k8s/services/overlays/local/secrets/keys/public.pem
+
+      - name: Render local Kubernetes overlay
+        run: kustomize build k8s/services/overlays/local > /tmp/micro-mart-local.yaml
+
+  security-gates:
+    name: Security gates
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Gitleaks secret scan
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Run pip-audit
+        uses: pypa/gh-action-pip-audit@v1.1.0
+        with:
+          inputs: requirements/constraints.txt
+
+      - name: Run Bandit
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install bandit==1.7.10
+          bandit -r services shared scripts -x "*/tests/*,*/alembic/*" -ll
+
+      - name: Set up Kustomize
+        uses: imranismail/setup-kustomize@v2
+
+      - name: Create CI-only dummy Kubernetes secrets
+        run: |
+          for example_file in k8s/services/overlays/local/secrets/*.env.example; do
+            cp "$example_file" "${example_file%.example}"
+          done
+          mkdir -p k8s/services/overlays/local/secrets/keys
+          openssl genrsa -out k8s/services/overlays/local/secrets/keys/private.pem 2048
+          openssl rsa -in k8s/services/overlays/local/secrets/keys/private.pem \
+            -pubout -out k8s/services/overlays/local/secrets/keys/public.pem
+
+      - name: Render local Kubernetes overlay
+        run: |
+          mkdir -p k8s-rendered
+          kustomize build k8s/services/overlays/local > k8s-rendered/micro-mart-local.yaml
+
+      - name: Run kube-linter
+        uses: stackrox/kube-linter-action@v1.0.7
+        with:
+          directory: k8s-rendered
