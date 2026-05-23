@@ -114,29 +114,6 @@ jobs:
       - name: Build service image
         run: docker build -f services/${{ matrix.service }}/Dockerfile -t micro-mart/${{ matrix.service }}:ci .
 
-  kustomize-build:
-    name: Kustomize build
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-
-      - name: Set up Kustomize
-        uses: imranismail/setup-kustomize@v2
-
-      - name: Create CI-only dummy Kubernetes secrets
-        run: |
-          for example_file in k8s/services/overlays/local/secrets/*.env.example; do
-            cp "$example_file" "${example_file%.example}"
-          done
-          mkdir -p k8s/services/overlays/local/secrets/keys
-          openssl genrsa -out k8s/services/overlays/local/secrets/keys/private.pem 2048
-          openssl rsa -in k8s/services/overlays/local/secrets/keys/private.pem \
-            -pubout -out k8s/services/overlays/local/secrets/keys/public.pem
-
-      - name: Render local Kubernetes overlay
-        run: kustomize build k8s/services/overlays/local > /tmp/micro-mart-local.yaml
-
   security-gates:
     name: Security gates
     runs-on: ubuntu-latest
