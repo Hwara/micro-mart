@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-      - "feat/#39"
 
   workflow_dispatch:
 
@@ -17,7 +16,7 @@ env:
 jobs:
   build-push-and-update-overlay:
     name: Build, push, and update local overlay
-    if: github.actor != 'github-actions[bot]' && (github.ref_name == 'main' || github.ref_name == 'feat/#39')
+    if: github.actor != 'github-actions[bot]' && github.ref_name == 'main'
     runs-on: [self-hosted, Linux, X64]
     steps:
       - name: Check out repository
