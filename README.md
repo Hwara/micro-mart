@@ -108,6 +108,13 @@ docker compose `
 
 Kubernetes 로컬 배포는 [`k8s/README.md`](k8s/)를 참고하세요.
 
+로컬 Kubernetes Secret 원문은 Git에 커밋하지 않습니다. Application을 Argo CD로 sync하기 전에
+아래 스크립트로 고정 이름 Secret을 먼저 적용합니다.
+
+```bash
+./scripts/apply_local_k8s_secrets.sh
+```
+
 ## 로컬 이미지 빌드 및 배포
 
 빌드 전 REGISTRY 및 TAG 설정 필요
@@ -158,9 +165,10 @@ micro-mart/
 | 2 | [`docs/service_function_definition.md`](docs/service_function_definition.md) | 서비스별 책임, 엔드포인트 계약, 서비스 간 호출 흐름 |
 | 3 | [`docs/micromart_design.md`](docs/micromart_design.md) | 전체 아키텍처, 설계 의도, 관찰성 시나리오 |
 | 4 | [`docs/dev_convention.md`](docs/dev_convention.md) | 코드 컨벤션, 파일 구조, 보안 및 테스트 규칙 |
-| 5 | [`k8s/README.md`](k8s/README.md) | 로컬 Kubernetes 배포 흐름 |
+| 5 | [`k8s/README.md`](k8s/README.md) | 로컬 Kubernetes 배포와 GitOps 흐름 |
 | 6 | [`k8s/db/README.md`](k8s/db/README.md) | PostgreSQL, Redis 준비 |
-| 7 | [`k8s/observability/README.md`](k8s/observability/README.md) | LGTM/OTel 배포 |
+| 7 | [`k8s/argocd/README.md`](k8s/argocd/README.md) | Argo CD 설치와 Gateway API 노출 |
+| 8 | [`k8s/observability/README.md`](k8s/observability/README.md) | LGTM/OTel 배포 |
 
 ## 구현 현황
 

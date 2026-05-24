@@ -842,7 +842,7 @@ Kubernetes manifest 조합 가능성, 보안/품질 게이트를 검증한다. C
 | Python 서비스 | `api-gateway`, `user-service`, `product-service`, `order-service`, `payment-service`, `notification-service` pytest 실행 |
 | 정적 검사 | 루트 `pyproject.toml` 기준 Ruff/Black 적용, mypy는 `shared`와 서비스별 `app` 패키지를 독립 실행 |
 | Docker build | 서비스별 Dockerfile이 레포 루트 build context에서 빌드 가능한지 확인 |
-| Kubernetes | CI runner 내부에서 dummy secret/JWT key를 만든 뒤 `kustomize build k8s/services/overlays/local` 실행 |
+| Kubernetes | Secret 원문 없이 `kustomize build k8s/services/overlays/local` 실행 |
 | Secret scan | Gitleaks로 repository 전체 secret scan 수행 |
 | Dependency CVE | pip-audit로 `requirements/constraints.txt` 기준 취약점 검사 |
 | Python security | Bandit으로 `services`, `shared`, `scripts` 검사. `tests`, `alembic`은 제외하고 medium 이상을 실패 기준으로 사용 |
@@ -853,8 +853,8 @@ Kubernetes manifest 조합 가능성, 보안/품질 게이트를 검증한다. C
 - 기존 `validate-pinned-versions.yml`은 유지하고, 종합 PR 검증은 `.github/workflows/ci.yml`로 분리한다.
 - workflow 권한은 `contents: read`, `pull-requests: read`로 제한한다. Gitleaks Action은 PR commit 목록
   조회를 위해 pull request read 권한이 필요하다.
-- local overlay의 실제 secret 파일은 Git에 커밋하지 않는다. CI에서는 runner 내부에서만 example 파일을
-  복사하고 임시 JWT key를 생성한다.
+- local overlay의 실제 secret 파일은 Git에 커밋하지 않는다. Secret은 고정 이름 참조이므로 CI는
+  Secret 원문 없이 Kustomize 렌더링 가능 여부를 검증한다.
 - Kustomize build는 kube-linter 입력 manifest 생성 단계에서 한 번만 수행한다. 렌더링 실패도
   `security-gates` job 실패로 드러난다.
 - CI 실패 원인과 재현 명령은 `docs/references/ci-reference.md`에 기록한다.
@@ -889,6 +889,7 @@ Pull Request → CI 검증 → merge
 | Image build/push | `docker/services.yaml` | `REGISTRY`, `TAG` 환경변수로 Compose image 이름 제어 |
 | Image registry | `172.25.46.10:32000` | `<service-name>:${GITHUB_SHA::12}` |
 | Argo CD Application | `gitops/argocd-applications/micro-mart-local.yaml` | `k8s/services/overlays/local`, manual sync |
+| Local Secret apply | `scripts/apply_local_k8s_secrets.sh` | Git에 없는 Secret 원문을 고정 이름 Secret으로 선적용 |
 
 #### 설계 의도
 
@@ -897,9 +898,11 @@ Pull Request → CI 검증 → merge
 - 이미지 빌드와 push는 기존 수동 배포와 같은 `docker/services.yaml`을 사용해 서비스 목록과 image 이름
   규칙이 갈라지지 않게 한다.
 - 로컬 registry는 GitHub-hosted runner에서 접근할 수 없으므로 WSL2 Ubuntu self-hosted runner를 사용한다.
+- local overlay는 Secret 원문을 Git에 포함하지 않는다. Argo CD가 참조할 Secret은
+  `scripts/apply_local_k8s_secrets.sh`로 `micro-mart-local` namespace에 먼저 생성한다.
 - 로컬 Chaos Mode와 부하 테스트에서는 환경변수 변경을 원하는 시점에 반영해야 하므로 Argo CD automated
   sync를 켜지 않고 manual sync를 기본으로 둔다.
-- local/staging/prod overlay를 분리해 환경별 ConfigMap, Secret, image tag, resource 정책을 관리한다.
+- local/staging/prod overlay를 분리해 환경별 ConfigMap, Secret 참조 방식, image tag, resource 정책을 관리한다.
 - sync drift가 발생하면 Argo CD diff로 원인을 확인하고 Git 기준 상태로 복구한다.
 - 내부 전용 서비스는 GitOps 배포 후에도 Gateway API로 직접 노출하지 않는다.
 

@@ -495,6 +495,8 @@ headers = {
 
 - 서비스 Dockerfile은 레포 루트를 build context로 전제한다.
 - Dockerfile은 `requirements/`와 `shared/telemetry/requirements.txt`를 먼저 복사한 뒤 서비스별 `requirements.txt`를 설치한다.
+- Docker build context에는 `.pytest_cache`, `.ruff_cache`, `.mypy_cache`, `.pip-audit-cache`,
+  `__pycache__` 같은 로컬 캐시 디렉터리를 포함하지 않는다.
 - 런타임 이미지는 `/app`을 작업 디렉터리로 사용하고 `PYTHONPATH=/app`을 설정한다.
 - 로컬 통합 실행은 Compose 파일을 역할별로 나누어 사용한다.
   - `docker/infra.yaml`: PostgreSQL, Redis, NATS
@@ -507,7 +509,7 @@ headers = {
 - Kubernetes 애플리케이션 서비스는 `k8s/services/base/<service-name>/` 아래에
   `deployment.yaml`, `service.yaml`, `kustomization.yaml`을 둔다.
 - 로컬 Kubernetes 실행은 `k8s/services/overlays/local/` overlay를 사용한다.
-  이 overlay는 서비스별 ConfigMap, Secret, JWT key Secret, local namespace를 생성한다.
+  이 overlay는 서비스별 ConfigMap, local namespace, image tag를 생성 또는 조합한다.
   local overlay의 기본 이미지 주소는 `172.25.46.10:32000/<service-name>:local`이다.
 - 각 애플리케이션 Deployment는 `/health`를 `livenessProbe`와 `readinessProbe`로 사용한다.
   `/health`는 인증 없이 호출 가능해야 하며, probe 때문에 비즈니스 상태가 변경되면 안 된다.
@@ -516,8 +518,11 @@ headers = {
 - 실제 Secret env 파일과 JWT key 파일은 Git에 커밋하지 않는다. Git에는
   `k8s/services/overlays/local/secrets/*.env.example`과 안내 문서만 남기고,
   로컬 실행자는 `.example`을 복사해 실제 값을 채운다.
+- local overlay가 참조하는 Secret은 `scripts/apply_local_k8s_secrets.sh`로
+  `micro-mart-local` namespace에 고정 이름으로 생성한다. Argo CD는 Git에 없는 Secret 원문을
+  생성하지 않는다.
 - `user-service`의 RS256 key는 `k8s/services/overlays/local/secrets/keys/` 아래에
-  `public.pem`, `private.pem`으로 복사한 뒤 Kustomize `secretGenerator`로 생성한다.
+  `public.pem`, `private.pem`으로 복사한 뒤 `jwt-keys` Secret으로 적용한다.
 - 앱 local overlay namespace는 `micro-mart-local`이다. PostgreSQL, Redis, NATS,
   OTel Collector 같은 공용 인프라는 `micro-mart` namespace를 사용한다.
   Prometheus, Grafana, Loki, Tempo는 `monitoring` namespace를 사용한다.
@@ -569,6 +574,9 @@ resources:
   `172.25.46.100-172.25.46.200`이며, 간단한 로컬 로드밸런서 용도로 Layer 2 모드를 사용한다.
 - Gateway API manifest는 `k8s/gateway/` 아래에 둔다. Envoy Gateway 설치와 Gateway/HTTPRoute
   적용 절차는 `k8s/gateway/README.md`에 기록한다.
+- Argo CD 외부 노출 manifest는 `k8s/argocd/` 아래에 둔다. Gateway TLS Secret은
+  `kubernetes.io/tls` 타입이어야 하며, Helm chart가 만드는 Opaque `argocd-secret`을
+  Gateway certificateRef로 직접 사용하지 않는다.
 - 외부 애플리케이션 트래픽은 `api-gateway`를 통해서만 들어오게 한다. 하위 서비스의 내부 API,
   특히 `payment-service`, `product-service`의 내부 재고 API, `notification-service`는 직접
   외부 노출하지 않는다.
@@ -618,8 +626,8 @@ Phase 13~16은 로컬 Kubernetes 구현을 운영 학습 환경으로 확장하�
 - 현재 mypy는 엄격한 타입 보장보다 명백한 타입 오류를 막는 smoke check 용도로 사용한다.
   서비스별 타입 품질이 올라가면 `ignore_missing_imports`와 `strict` 옵션을 단계적으로 강화한다.
 - Docker build는 레포 루트를 build context로 사용한다.
-- local Kustomize overlay 검증 시 실제 secret 파일을 Git에 커밋하지 않는다. CI runner 내부에서만
-  `.env.example`을 복사하고 임시 JWT key를 생성한 뒤 `kustomize build`를 실행한다.
+- local Kustomize overlay 검증 시 실제 secret 파일을 Git에 커밋하지 않는다. local overlay는
+  고정 이름 Secret을 참조하므로 CI runner는 Secret 원문 없이 `kustomize build`를 실행할 수 있다.
 - kube-linter는 source YAML이 아니라 Kustomize 렌더링 결과를 대상으로 실행한다. 렌더링은
   `security-gates` job에서 한 번만 수행해 중복 검증을 피한다.
 - Bandit은 `services`, `shared`, `scripts`를 검사하되 `tests`와 `alembic`은 제외한다. 초기 실패
@@ -652,8 +660,12 @@ Phase 13~16은 로컬 Kubernetes 구현을 운영 학습 환경으로 확장하�
   checkout credentials를 사용할 수 있다. PR CI workflow는 계속 read-only 권한을 유지한다.
 - 로컬 Argo CD Application은 `gitops/argocd-applications/micro-mart-local.yaml`에 두고,
   `k8s/services/overlays/local`을 바라본다.
+- local Secret은 GitOps 대상이 아니므로 Application sync 전에
+  `scripts/apply_local_k8s_secrets.sh`로 고정 이름 Secret을 먼저 적용한다.
 - 로컬 Chaos Mode와 부하 테스트의 배포 타이밍을 사람이 통제할 수 있도록 Phase 15 local Application은
   automated sync, prune, self-heal을 켜지 않는다. 수동 sync로 diff 확인 후 반영한다.
+- feature branch에서 GitOps를 테스트할 때는 Application의 `targetRevision`을 임시 branch로 바꾸고,
+  테스트 후 `main`으로 되돌린다. Secret 존재 여부는 branch가 아니라 클러스터 선적용 상태에 의해 결정된다.
 - 수동으로 클러스터 리소스를 수정해 drift가 생기면 Argo CD diff를 확인하고 Git 기준으로 복구한다.
 - 내부 전용 서비스와 내부 API는 GitOps 배포 후에도 Gateway API나 LoadBalancer로 직접 노출하지 않는다.
 - secret manifest 원본은 Git에 커밋하지 않는다. Git에는 `.example`, sealed secret, external secret

@@ -12,6 +12,9 @@ Gateway API와 Envoy Gateway를 사용한다.
 
 참고: <https://gateway-api.sigs.k8s.io/guides/getting-started/simple-gateway/>
 
+Argo CD UI의 HTTPS 노출은 별도 namespace와 TLS Secret을 사용하므로
+[`k8s/argocd/README.md`](../argocd/)를 따른다.
+
 ---
 
 ## 1. Envoy Gateway 배포
