@@ -641,6 +641,17 @@ Phase 13~16은 로컬 Kubernetes 구현을 운영 학습 환경으로 확장하�
 - Argo CD Application은 환경별 overlay를 바라본다. local, staging, prod가 생기면 각각 별도 overlay와
   Application으로 분리한다.
 - CI는 이미지 빌드/푸시와 manifest image tag 갱신까지만 담당한다. 실제 동기화는 Argo CD가 수행한다.
+- 로컬 CD는 `.github/workflows/cd-local-gitops.yml`에서 WSL2 Ubuntu self-hosted runner를 사용한다.
+  runner는 `self-hosted`, `Linux`, `X64` label을 가져야 하고, Docker build/push와
+  `172.25.46.10:32000` registry 접근이 가능해야 한다.
+- 로컬 CD image tag는 `${GITHUB_SHA::12}`를 사용한다. 고정 `local` 태그는 수동 로컬 배포용으로만
+  사용할 수 있고, GitOps CD에서는 commit SHA tag로 배포 이력을 남긴다.
+- CD workflow가 overlay tag 갱신 commit을 push해야 하므로 해당 workflow만 `contents: write` 권한과
+  checkout credentials를 사용할 수 있다. PR CI workflow는 계속 read-only 권한을 유지한다.
+- 로컬 Argo CD Application은 `gitops/argocd-applications/micro-mart-local.yaml`에 두고,
+  `k8s/services/overlays/local`을 바라본다.
+- 로컬 Chaos Mode와 부하 테스트의 배포 타이밍을 사람이 통제할 수 있도록 Phase 15 local Application은
+  automated sync, prune, self-heal을 켜지 않는다. 수동 sync로 diff 확인 후 반영한다.
 - 수동으로 클러스터 리소스를 수정해 drift가 생기면 Argo CD diff를 확인하고 Git 기준으로 복구한다.
 - 내부 전용 서비스와 내부 API는 GitOps 배포 후에도 Gateway API나 LoadBalancer로 직접 노출하지 않는다.
 - secret manifest 원본은 Git에 커밋하지 않는다. Git에는 `.example`, sealed secret, external secret

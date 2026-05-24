@@ -141,6 +141,7 @@ micro-mart/
 ├── shared/         # 공통 OpenTelemetry 및 로깅 모듈
 ├── docker/         # 로컬 infra, observability, service Compose 구성
 ├── k8s/            # Kubernetes 인프라, 관찰성, 서비스 배포 매니페스트
+├── gitops/         # Argo CD Application 매니페스트
 ├── docs/           # 설계, 기능 정의, 컨벤션, reference 문서
 ├── requirements/   # 공통 런타임/테스트 의존성 및 constraints
 ├── scripts/        # PyPi 버전 확인, JWT 키 생성 등 스크립트
@@ -175,8 +176,9 @@ micro-mart/
 | `notification-service` | 완료 |
 | Kubernetes 매니페스트 | 완료 |
 | k6 부하 스크립트 | 완료 |
+| Kubernetes 외부 노출 | 완료 |
 | 서비스별 Alembic migration | 완료 |
-| Alerting 알림 | 예정 |
-| CI | 예정 |
-| GitOps 중심 CD | 예정 |
+| Alerting 알림 | 완료 |
+| CI | 완료 |
+| GitOps 중심 CD | 완료 |
 | AWS Cloud + Terraform | 예정 |

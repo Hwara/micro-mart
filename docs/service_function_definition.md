@@ -866,21 +866,36 @@ Kubernetes manifest 조합 가능성, 보안/품질 게이트를 검증한다. C
 
 Argo CD는 Git에 선언된 Kubernetes overlay를 클러스터의 실제 상태와 동기화한다. GitHub Actions는
 이미지 빌드와 태그 갱신까지만 담당하고, `kubectl apply` 또는 Helm 직접 배포는 CI에서 수행하지
-않는다.
+않는다. 로컬 학습 환경에서는 WSL2 Ubuntu self-hosted runner가 사설 로컬 registry
+`172.25.46.10:32000`에 접근 가능한 배포 runner 역할을 맡는다.
 
 #### 배포 흐름
 
 ```text
 Pull Request → CI 검증 → merge
-→ GitHub Actions 이미지 빌드/푸시
-→ Kubernetes overlay image tag 갱신 commit
-→ Argo CD Application sync
-→ EKS 또는 local Kubernetes에 배포
+→ GitHub Actions self-hosted runner 이미지 빌드/푸시
+→ Kubernetes local overlay image tag 갱신 commit
+→ Argo CD Application OutOfSync 확인
+→ Argo CD manual sync
+→ local Kubernetes에 배포
 ```
+
+#### 운영 인터페이스
+
+| 구성 | 위치 | 기준 |
+| ---- | ---- | ---- |
+| CD workflow | `.github/workflows/cd-local-gitops.yml` | `main` push, `workflow_dispatch` |
+| Runner | WSL2 Ubuntu self-hosted runner | `self-hosted`, `Linux`, `X64` label |
+| Image registry | `172.25.46.10:32000` | `<service-name>:${GITHUB_SHA::12}` |
+| Argo CD Application | `gitops/argocd-applications/micro-mart-local.yaml` | `k8s/services/overlays/local`, manual sync |
 
 #### 설계 의도
 
 - 배포 기준은 클러스터 명령 이력이 아니라 Git 이력이다.
+- local overlay는 commit SHA image tag를 사용해 어떤 코드가 배포됐는지 Git 이력으로 추적한다.
+- 로컬 registry는 GitHub-hosted runner에서 접근할 수 없으므로 WSL2 Ubuntu self-hosted runner를 사용한다.
+- 로컬 Chaos Mode와 부하 테스트에서는 환경변수 변경을 원하는 시점에 반영해야 하므로 Argo CD automated
+  sync를 켜지 않고 manual sync를 기본으로 둔다.
 - local/staging/prod overlay를 분리해 환경별 ConfigMap, Secret, image tag, resource 정책을 관리한다.
 - sync drift가 발생하면 Argo CD diff로 원인을 확인하고 Git 기준 상태로 복구한다.
 - 내부 전용 서비스는 GitOps 배포 후에도 Gateway API로 직접 노출하지 않는다.

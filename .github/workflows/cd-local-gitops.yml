@@ -1,0 +1,89 @@
+name: CD Local GitOps
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  REGISTRY: 172.25.46.10:32000
+
+jobs:
+  build-push-and-update-overlay:
+    name: Build, push, and update local overlay
+    if: github.actor != 'github-actions[bot]' && github.ref_name == 'main'
+    runs-on: [self-hosted, Linux, X64]
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: main
+          persist-credentials: true
+
+      - name: Check Docker access
+        run: docker version
+
+      - name: Set image tag
+        run: echo "IMAGE_TAG=${GITHUB_SHA::12}" >> "$GITHUB_ENV"
+
+      - name: Build and push service images
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          services=(
+            api-gateway
+            user-service
+            product-service
+            order-service
+            payment-service
+            notification-service
+          )
+
+          for service in "${services[@]}"; do
+            image="${REGISTRY}/${service}:${IMAGE_TAG}"
+            docker build -f "services/${service}/Dockerfile" -t "${image}" .
+            docker push "${image}"
+          done
+
+      - name: Set up Kustomize
+        uses: imranismail/setup-kustomize@2ba527d4d055ab63514ba50a99456fc35684947f
+
+      - name: Update local overlay image tags
+        shell: bash
+        working-directory: k8s/services/overlays/local
+        run: |
+          set -euo pipefail
+
+          services=(
+            user-service
+            product-service
+            order-service
+            payment-service
+            notification-service
+            api-gateway
+          )
+
+          for service in "${services[@]}"; do
+            kustomize edit set image "${service}=${REGISTRY}/${service}:${IMAGE_TAG}"
+          done
+
+      - name: Commit and push overlay update
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if git diff --quiet -- k8s/services/overlays/local/kustomization.yaml; then
+            echo "No overlay image tag changes to commit."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add k8s/services/overlays/local/kustomization.yaml
+          git commit -m "chore: update local image tags ${IMAGE_TAG}"
+          git push

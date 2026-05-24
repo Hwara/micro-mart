@@ -99,6 +99,35 @@ docker push ${REGISTRY}/api-gateway:${TAG}
 
 이미지 주소 또는 태그를 변경한 경우 k8s/services/overlays/local/kustomization.yaml의 images 설정도 같은 값으로 변경해야 합니다.
 
+### GitOps CD로 이미지 태그 갱신
+
+Phase 15 이후에는 `main`에 merge되면 GitHub Actions `CD Local GitOps` workflow가 WSL2 Ubuntu
+self-hosted runner에서 서비스 이미지를 빌드하고 로컬 registry에 push합니다. 이미지 태그는 짧은
+commit SHA이며, workflow가 `k8s/services/overlays/local/kustomization.yaml`의 `images` 값을 같은
+태그로 갱신해 commit합니다.
+
+로컬 registry 주소는 기존 local overlay와 동일합니다.
+
+```text
+172.25.46.10:32000/<service-name>:<commit-sha>
+```
+
+이 workflow를 사용하려면 WSL2 Ubuntu runner에서 아래 조건이 충족되어야 합니다.
+
+- GitHub self-hosted runner가 `self-hosted`, `Linux`, `X64` label로 online 상태
+- WSL2 Ubuntu에서 `docker version` 실행 가능
+- WSL2 Ubuntu에서 `172.25.46.10:32000` registry로 `docker push` 가능
+
+Argo CD Application은 `gitops/argocd-applications/micro-mart-local.yaml`에 정의되어 있습니다.
+로컬 Chaos 테스트와 환경변수 실험의 배포 타이밍을 통제하기 위해 automated sync는 사용하지 않습니다.
+
+```bash
+kubectl apply -f gitops/argocd-applications/micro-mart-local.yaml
+```
+
+Argo CD에서 diff를 확인한 뒤 manual sync를 실행하면 Git에 기록된 local overlay 상태가
+`micro-mart-local` namespace에 반영됩니다.
+
 ### Kustomize 실행
 
 repository root 기준:
