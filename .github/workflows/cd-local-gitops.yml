@@ -30,9 +30,11 @@ jobs:
         run: docker version
 
       - name: Set image tag
-        run: echo "IMAGE_TAG=${GITHUB_SHA::12}" >> "$GITHUB_ENV"
+        run: |
+          echo "IMAGE_TAG=${GITHUB_SHA::12}" >> "$GITHUB_ENV"
+          echo "TAG=${GITHUB_SHA::12}" >> "$GITHUB_ENV"
 
-      - name: Build and push service images
+      - name: Create Compose env placeholders
         shell: bash
         run: |
           set -euo pipefail
@@ -47,10 +49,19 @@ jobs:
           )
 
           for service in "${services[@]}"; do
-            image="${REGISTRY}/${service}:${IMAGE_TAG}"
-            docker build -f "services/${service}/Dockerfile" -t "${image}" .
-            docker push "${image}"
+            env_file="services/${service}/.env"
+            if [ ! -f "${env_file}" ]; then
+              touch "${env_file}"
+            fi
           done
+
+      - name: Build and push service images
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          docker compose -f docker/services.yaml build
+          docker compose -f docker/services.yaml push
 
       - name: Set up Kustomize
         uses: imranismail/setup-kustomize@2ba527d4d055ab63514ba50a99456fc35684947f

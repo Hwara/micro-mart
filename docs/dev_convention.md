@@ -644,6 +644,8 @@ Phase 13~16은 로컬 Kubernetes 구현을 운영 학습 환경으로 확장하�
 - 로컬 CD는 `.github/workflows/cd-local-gitops.yml`에서 WSL2 Ubuntu self-hosted runner를 사용한다.
   runner는 `self-hosted`, `Linux`, `X64` label을 가져야 하고, Docker build/push와
   `172.25.46.10:32000` registry 접근이 가능해야 한다.
+- 로컬 CD의 이미지 build/push는 기존 수동 배포와 동일하게 `docker/services.yaml`을 사용한다.
+  workflow는 `REGISTRY`와 `TAG` 환경변수로 Compose image 이름을 제어한다.
 - 로컬 CD image tag는 `${GITHUB_SHA::12}`를 사용한다. 고정 `local` 태그는 수동 로컬 배포용으로만
   사용할 수 있고, GitOps CD에서는 commit SHA tag로 배포 이력을 남긴다.
 - CD workflow가 overlay tag 갱신 commit을 push해야 하므로 해당 workflow만 `contents: write` 권한과

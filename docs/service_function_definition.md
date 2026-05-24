@@ -886,6 +886,7 @@ Pull Request → CI 검증 → merge
 | ---- | ---- | ---- |
 | CD workflow | `.github/workflows/cd-local-gitops.yml` | `main` push, `workflow_dispatch` |
 | Runner | WSL2 Ubuntu self-hosted runner | `self-hosted`, `Linux`, `X64` label |
+| Image build/push | `docker/services.yaml` | `REGISTRY`, `TAG` 환경변수로 Compose image 이름 제어 |
 | Image registry | `172.25.46.10:32000` | `<service-name>:${GITHUB_SHA::12}` |
 | Argo CD Application | `gitops/argocd-applications/micro-mart-local.yaml` | `k8s/services/overlays/local`, manual sync |
 
@@ -893,6 +894,8 @@ Pull Request → CI 검증 → merge
 
 - 배포 기준은 클러스터 명령 이력이 아니라 Git 이력이다.
 - local overlay는 commit SHA image tag를 사용해 어떤 코드가 배포됐는지 Git 이력으로 추적한다.
+- 이미지 빌드와 push는 기존 수동 배포와 같은 `docker/services.yaml`을 사용해 서비스 목록과 image 이름
+  규칙이 갈라지지 않게 한다.
 - 로컬 registry는 GitHub-hosted runner에서 접근할 수 없으므로 WSL2 Ubuntu self-hosted runner를 사용한다.
 - 로컬 Chaos Mode와 부하 테스트에서는 환경변수 변경을 원하는 시점에 반영해야 하므로 Argo CD automated
   sync를 켜지 않고 manual sync를 기본으로 둔다.

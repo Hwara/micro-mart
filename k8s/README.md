@@ -102,9 +102,9 @@ docker push ${REGISTRY}/api-gateway:${TAG}
 ### GitOps CD로 이미지 태그 갱신
 
 Phase 15 이후에는 `main`에 merge되면 GitHub Actions `CD Local GitOps` workflow가 WSL2 Ubuntu
-self-hosted runner에서 서비스 이미지를 빌드하고 로컬 registry에 push합니다. 이미지 태그는 짧은
-commit SHA이며, workflow가 `k8s/services/overlays/local/kustomization.yaml`의 `images` 값을 같은
-태그로 갱신해 commit합니다.
+self-hosted runner에서 `docker/services.yaml`로 서비스 이미지를 빌드하고 로컬 registry에 push합니다.
+이미지 태그는 짧은 commit SHA이며, workflow가 `k8s/services/overlays/local/kustomization.yaml`의
+`images` 값을 같은 태그로 갱신해 commit합니다.
 
 로컬 registry 주소는 기존 local overlay와 동일합니다.
 
@@ -116,6 +116,7 @@ commit SHA이며, workflow가 `k8s/services/overlays/local/kustomization.yaml`�
 
 - GitHub self-hosted runner가 `self-hosted`, `Linux`, `X64` label로 online 상태
 - WSL2 Ubuntu에서 `docker version` 실행 가능
+- WSL2 Ubuntu에서 `docker compose -f docker/services.yaml build` 실행 가능
 - WSL2 Ubuntu에서 `172.25.46.10:32000` registry로 `docker push` 가능
 
 Argo CD Application은 `gitops/argocd-applications/micro-mart-local.yaml`에 정의되어 있습니다.
