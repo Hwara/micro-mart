@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - main
+      - "feat/#39"
+
   workflow_dispatch:
 
 permissions:
@@ -15,13 +17,13 @@ env:
 jobs:
   build-push-and-update-overlay:
     name: Build, push, and update local overlay
-    if: github.actor != 'github-actions[bot]' && github.ref_name == 'main'
+    if: github.actor != 'github-actions[bot]' && (github.ref_name == 'main' || github.ref_name == 'feat/#39')
     runs-on: [self-hosted, Linux, X64]
     steps:
       - name: Check out repository
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
-          ref: main
+          ref: ${{ github.ref_name }}
           persist-credentials: true
 
       - name: Check Docker access
