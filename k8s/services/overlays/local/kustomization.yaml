@@ -1,75 +1,77 @@
 resources:
-  - namespace.yaml
-  - ../../base
+- namespace.yaml
+- ../../base
 
 namespace: micro-mart-local
 
 images:
-  - name: user-service
-    newName: 172.25.46.10:32000/user-service
-    newTag: local
-  - name: product-service
-    newName: 172.25.46.10:32000/product-service
-    newTag: local
-  - name: order-service
-    newName: 172.25.46.10:32000/order-service
-    newTag: local
-  - name: payment-service
-    newName: 172.25.46.10:32000/payment-service
-    newTag: local
-  - name: notification-service
-    newName: 172.25.46.10:32000/notification-service
-    newTag: local
-  - name: api-gateway
-    newName: 172.25.46.10:32000/api-gateway
-    newTag: local
+- name: api-gateway
+  newName: 172.25.46.10:32000/api-gateway
+  newTag: 9bab6eafcab9
+- name: notification-service
+  newName: 172.25.46.10:32000/notification-service
+  newTag: 9bab6eafcab9
+- name: order-service
+  newName: 172.25.46.10:32000/order-service
+  newTag: 9bab6eafcab9
+- name: payment-service
+  newName: 172.25.46.10:32000/payment-service
+  newTag: 9bab6eafcab9
+- name: product-service
+  newName: 172.25.46.10:32000/product-service
+  newTag: 9bab6eafcab9
+- name: user-service
+  newName: 172.25.46.10:32000/user-service
+  newTag: 9bab6eafcab9
 
 patches:
-  - path: patches/image-pull-policy-always.yaml
+- path: patches/image-pull-policy-always.yaml
 
 configMapGenerator:
-  - name: user-service-config
-    envs:
-      - config/user-service.env
-  - name: product-service-config
-    envs:
-      - config/product-service.env
-  - name: order-service-config
-    envs:
-      - config/order-service.env
-  - name: payment-service-config
-    envs:
-      - config/payment-service.env
-  - name: notification-service-config
-    envs:
-      - config/notification-service.env
-  - name: api-gateway-config
-    envs:
-      - config/api-gateway.env
+- envs:
+  - config/user-service.env
+  name: user-service-config
+- envs:
+  - config/product-service.env
+  name: product-service-config
+- envs:
+  - config/order-service.env
+  name: order-service-config
+- envs:
+  - config/payment-service.env
+  name: payment-service-config
+- envs:
+  - config/notification-service.env
+  name: notification-service-config
+- envs:
+  - config/api-gateway.env
+  name: api-gateway-config
 
 secretGenerator:
-  - name: user-database-secrets
-    envs:
-      - secrets/user-database-secret.env
-  - name: product-database-secrets
-    envs:
-      - secrets/product-database-secret.env
-  - name: order-database-secrets
-    envs:
-      - secrets/order-database-secret.env
-  - name: payment-database-secrets
-    envs:
-      - secrets/payment-database-secret.env
-  - name: redis-secrets
-    envs:
-      - secrets/redis-secrets.env
-  - name: nats-secrets
-    envs:
-      - secrets/nats-secrets.env
-  - name: internal-service-token-secrets
-    envs:
-      - secrets/internal-service-token-secret.env
-  - name: jwt-keys
-    files:
-      - secrets/keys/public.pem
-      - secrets/keys/private.pem
+- envs:
+  - secrets/user-database-secret.env
+  name: user-database-secrets
+- envs:
+  - secrets/product-database-secret.env
+  name: product-database-secrets
+- envs:
+  - secrets/order-database-secret.env
+  name: order-database-secrets
+- envs:
+  - secrets/payment-database-secret.env
+  name: payment-database-secrets
+- envs:
+  - secrets/redis-secrets.env
+  name: redis-secrets
+- envs:
+  - secrets/nats-secrets.env
+  name: nats-secrets
+- envs:
+  - secrets/internal-service-token-secret.env
+  name: internal-service-token-secrets
+- files:
+  - secrets/keys/public.pem
+  - secrets/keys/private.pem
+  name: jwt-keys
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
