@@ -12,11 +12,12 @@ Argo CD가 Git에 없는 로컬 secret 파일을 읽을 수 없기 때문에, Se
 repository root 기준:
 
 ```bash
-./scripts/apply_local_k8s_secrets.sh
+bash scripts/apply_local_k8s_secrets.sh
 ```
 
 이 스크립트는 `micro-mart-local` namespace를 만든 뒤 아래 Secret을 `kubectl apply` 방식으로
 생성 또는 갱신한다.
+필수 입력 파일이 하나라도 없으면 어떤 Secret도 변경하지 않고 실패한다.
 
 ## Secret 목록
 

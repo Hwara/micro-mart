@@ -112,7 +112,7 @@ Kubernetes 로컬 배포는 [`k8s/README.md`](k8s/)를 참고하세요.
 아래 스크립트로 고정 이름 Secret을 먼저 적용합니다.
 
 ```bash
-./scripts/apply_local_k8s_secrets.sh
+bash scripts/apply_local_k8s_secrets.sh
 ```
 
 ## 로컬 이미지 빌드 및 배포

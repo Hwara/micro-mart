@@ -4,6 +4,25 @@ set -euo pipefail
 NAMESPACE="micro-mart-local"
 SECRET_DIR="k8s/services/overlays/local/secrets"
 
+required_files=(
+  "${SECRET_DIR}/user-database-secret.env"
+  "${SECRET_DIR}/product-database-secret.env"
+  "${SECRET_DIR}/order-database-secret.env"
+  "${SECRET_DIR}/payment-database-secret.env"
+  "${SECRET_DIR}/redis-secrets.env"
+  "${SECRET_DIR}/nats-secrets.env"
+  "${SECRET_DIR}/internal-service-token-secret.env"
+  "${SECRET_DIR}/keys/public.pem"
+  "${SECRET_DIR}/keys/private.pem"
+)
+
+for file in "${required_files[@]}"; do
+  if [ ! -f "${file}" ]; then
+    echo "Missing required secret input file: ${file}" >&2
+    exit 1
+  fi
+done
+
 kubectl create namespace "${NAMESPACE}" --dry-run=client -o yaml | kubectl apply -f -
 
 kubectl create secret generic user-database-secrets \

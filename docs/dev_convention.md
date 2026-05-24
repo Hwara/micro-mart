@@ -521,6 +521,7 @@ headers = {
 - local overlay가 참조하는 Secret은 `scripts/apply_local_k8s_secrets.sh`로
   `micro-mart-local` namespace에 고정 이름으로 생성한다. Argo CD는 Git에 없는 Secret 원문을
   생성하지 않는다.
+  문서에서는 실행 권한 차이를 피하기 위해 `bash scripts/apply_local_k8s_secrets.sh`로 안내한다.
 - `user-service`의 RS256 key는 `k8s/services/overlays/local/secrets/keys/` 아래에
   `public.pem`, `private.pem`으로 복사한 뒤 `jwt-keys` Secret으로 적용한다.
 - 앱 local overlay namespace는 `micro-mart-local`이다. PostgreSQL, Redis, NATS,
@@ -658,14 +659,18 @@ Phase 13~16은 로컬 Kubernetes 구현을 운영 학습 환경으로 확장하�
   사용할 수 있고, GitOps CD에서는 commit SHA tag로 배포 이력을 남긴다.
 - CD workflow가 overlay tag 갱신 commit을 push해야 하므로 해당 workflow만 `contents: write` 권한과
   checkout credentials를 사용할 수 있다. PR CI workflow는 계속 read-only 권한을 유지한다.
+- CD workflow는 main 배포 작업을 concurrency group으로 직렬화하고, overlay tag commit 직전
+  `origin/main`을 rebase한 뒤 image tag를 다시 설정한다.
 - 로컬 Argo CD Application은 `gitops/argocd-applications/micro-mart-local.yaml`에 두고,
   `k8s/services/overlays/local`을 바라본다.
 - local Secret은 GitOps 대상이 아니므로 Application sync 전에
-  `scripts/apply_local_k8s_secrets.sh`로 고정 이름 Secret을 먼저 적용한다.
+  `bash scripts/apply_local_k8s_secrets.sh`로 고정 이름 Secret을 먼저 적용한다.
 - 로컬 Chaos Mode와 부하 테스트의 배포 타이밍을 사람이 통제할 수 있도록 Phase 15 local Application은
   automated sync, prune, self-heal을 켜지 않는다. 수동 sync로 diff 확인 후 반영한다.
 - feature branch에서 GitOps를 테스트할 때는 Application의 `targetRevision`을 임시 branch로 바꾸고,
   테스트 후 `main`으로 되돌린다. Secret 존재 여부는 branch가 아니라 클러스터 선적용 상태에 의해 결정된다.
+- main merge 직후에는 CD workflow가 commit SHA image tag 갱신 commit을 성공시킨 뒤 Argo CD manual
+  sync를 실행한다.
 - 수동으로 클러스터 리소스를 수정해 drift가 생기면 Argo CD diff를 확인하고 Git 기준으로 복구한다.
 - 내부 전용 서비스와 내부 API는 GitOps 배포 후에도 Gateway API나 LoadBalancer로 직접 노출하지 않는다.
 - secret manifest 원본은 Git에 커밋하지 않는다. Git에는 `.example`, sealed secret, external secret

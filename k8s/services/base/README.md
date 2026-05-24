@@ -36,7 +36,7 @@ Base Deployment는 아래 Secret이 이미 존재한다고 가정한다.
 로컬 환경에서는 repository root에서 아래 스크립트를 먼저 실행해 Secret을 생성한다.
 
 ```bash
-./scripts/apply_local_k8s_secrets.sh
+bash scripts/apply_local_k8s_secrets.sh
 ```
 
 ## ConfigMap 참조

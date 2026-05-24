@@ -90,7 +90,7 @@ kubectl get secret argocd-initial-admin-secret -n argocd \
 Application을 sync하기 전에 local Secret을 먼저 생성한다.
 
 ```bash
-./scripts/apply_local_k8s_secrets.sh
+bash scripts/apply_local_k8s_secrets.sh
 kubectl apply -f gitops/argocd-applications/micro-mart-local.yaml
 ```
 
@@ -111,6 +111,13 @@ spec:
 주의할 점:
 
 - branch에 local Secret 원문이 없어도 정상이다. Secret은 Git이 아니라
-  `./scripts/apply_local_k8s_secrets.sh`로 클러스터에 미리 만든다.
+  `bash scripts/apply_local_k8s_secrets.sh`로 클러스터에 미리 만든다.
 - Secret이 없다는 sync 에러가 나면 Application 문제가 아니라 선행 Secret 적용이 빠진 것이다.
+- merge 직후에는 CD workflow가 main commit SHA로 overlay tag 갱신 commit을 만든 뒤 sync한다.
 - 테스트가 끝나면 `targetRevision: main`으로 되돌린 뒤 main 기준 sync 흐름을 확인한다.
+
+## Helm Release Name 주의사항
+
+`argocd-http-route.yaml`의 backend는 Helm release name `my-argo-cd` 기준인
+`my-argo-cd-argocd-server` Service를 바라본다. Helm release name을 바꾸면
+`argocd-http-route.yaml`의 `backendRefs.name`도 함께 변경한다.

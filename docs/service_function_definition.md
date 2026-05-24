@@ -898,12 +898,15 @@ Pull Request → CI 검증 → merge
 - 이미지 빌드와 push는 기존 수동 배포와 같은 `docker/services.yaml`을 사용해 서비스 목록과 image 이름
   규칙이 갈라지지 않게 한다.
 - 로컬 registry는 GitHub-hosted runner에서 접근할 수 없으므로 WSL2 Ubuntu self-hosted runner를 사용한다.
+- CD workflow는 main 배포 작업을 concurrency group으로 직렬화하고, overlay tag commit 직전
+  최신 `origin/main`을 rebase한 뒤 image tag를 다시 설정한다.
 - local overlay는 Secret 원문을 Git에 포함하지 않는다. Argo CD가 참조할 Secret은
-  `scripts/apply_local_k8s_secrets.sh`로 `micro-mart-local` namespace에 먼저 생성한다.
+  `bash scripts/apply_local_k8s_secrets.sh`로 `micro-mart-local` namespace에 먼저 생성한다.
 - 로컬 Chaos Mode와 부하 테스트에서는 환경변수 변경을 원하는 시점에 반영해야 하므로 Argo CD automated
   sync를 켜지 않고 manual sync를 기본으로 둔다.
 - local/staging/prod overlay를 분리해 환경별 ConfigMap, Secret 참조 방식, image tag, resource 정책을 관리한다.
 - sync drift가 발생하면 Argo CD diff로 원인을 확인하고 Git 기준 상태로 복구한다.
+- main merge 직후에는 CD workflow가 commit SHA image tag 갱신 commit을 성공시킨 뒤 manual sync한다.
 - 내부 전용 서비스는 GitOps 배포 후에도 Gateway API로 직접 노출하지 않는다.
 
 ### 6.4 Phase 16 — AWS Cloud Architecture + Terraform

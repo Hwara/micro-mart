@@ -65,7 +65,7 @@ cp keys/private.pem k8s/services/overlays/local/secrets/keys/private.pem
 Secret을 클러스터에 적용한다.
 
 ```bash
-./scripts/apply_local_k8s_secrets.sh
+bash scripts/apply_local_k8s_secrets.sh
 ```
 
 자세한 Secret 목록은 [`k8s/services/overlays/local/secrets/README.md`](services/overlays/local/secrets/)를
@@ -126,7 +126,8 @@ Argo CD에서 diff를 확인한 뒤 manual sync를 실행하면 Git에 기록된
 
 `feat/#39` 같은 branch에서 먼저 테스트할 때는 Argo CD Application의 `targetRevision`만 해당 branch로
 일시 변경한다. 단, Secret은 GitOps 대상이 아니므로 branch 변경 전에도
-`./scripts/apply_local_k8s_secrets.sh`로 클러스터에 먼저 존재해야 한다.
+`bash scripts/apply_local_k8s_secrets.sh`로 클러스터에 먼저 존재해야 한다.
+merge 직후에는 CD workflow의 overlay tag 갱신 commit이 성공한 뒤 Argo CD manual sync를 실행한다.
 
 ## 외부 노출
 

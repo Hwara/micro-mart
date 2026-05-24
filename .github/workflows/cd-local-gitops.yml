@@ -7,8 +7,11 @@ on:
 
   workflow_dispatch:
 
-permissions:
-  contents: write
+permissions: {}
+
+concurrency:
+  group: cd-local-gitops-main
+  cancel-in-progress: false
 
 env:
   REGISTRY: 172.25.46.10:32000
@@ -17,6 +20,8 @@ jobs:
   build-push-and-update-overlay:
     name: Build, push, and update local overlay
     if: github.actor != 'github-actions[bot]' && github.ref_name == 'main'
+    permissions:
+      contents: write
     runs-on: [self-hosted, Linux, X64]
     steps:
       - name: Check out repository
@@ -65,11 +70,13 @@ jobs:
       - name: Set up Kustomize
         uses: imranismail/setup-kustomize@2ba527d4d055ab63514ba50a99456fc35684947f
 
-      - name: Update local overlay image tags
+      - name: Commit and push overlay update
         shell: bash
-        working-directory: k8s/services/overlays/local
         run: |
           set -euo pipefail
+
+          git fetch origin main
+          git rebase origin/main
 
           services=(
             user-service
@@ -80,14 +87,11 @@ jobs:
             api-gateway
           )
 
+          pushd k8s/services/overlays/local
           for service in "${services[@]}"; do
             kustomize edit set image "${service}=${REGISTRY}/${service}:${IMAGE_TAG}"
           done
-
-      - name: Commit and push overlay update
-        shell: bash
-        run: |
-          set -euo pipefail
+          popd
 
           if git diff --quiet -- k8s/services/overlays/local/kustomization.yaml; then
             echo "No overlay image tag changes to commit."
