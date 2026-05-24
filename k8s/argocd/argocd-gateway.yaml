@@ -1,0 +1,20 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: argocd-gateway
+  namespace: argocd
+spec:
+  gatewayClassName: eg
+  listeners:
+    - protocol: HTTPS
+      port: 443
+      name: argocd-gateway
+      allowedRoutes:
+        namespaces:
+          from: Same
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: argocd-gateway-tls
+            kind: Secret
+            group: ""
