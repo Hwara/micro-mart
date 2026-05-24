@@ -18,6 +18,7 @@ Grafana에서 로그 -> 트레이스로 바로 이동(drilldown)할 수 있게 �
 """
 
 import logging
+from typing import Any
 
 import structlog
 
@@ -43,7 +44,7 @@ def init_logging(service_name: str, log_format: str = "pretty") -> None:
     # 3. service 이름 추가
     # 4. 스택 트레이스 포맷팅 (예외 발생 시)
     # trace_id 및 span_id는 LoggingInstrumentor 에서 자동으로 추가
-    shared_processors = [
+    shared_processors: list[Any] = [
         structlog.stdlib.add_log_level,
         structlog.processors.TimeStamper(fmt="iso"),
         structlog.contextvars.merge_contextvars,

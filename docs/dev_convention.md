@@ -1,6 +1,6 @@
 # MicroMart — AI 개발 컨벤션 가이드
 
-> 최종 갱신일: 2026-05-21
+> 최종 갱신일: 2026-05-24
 > 목적: MicroMart 프로젝트에서 AI/개발자가 일관된 구조와 규칙으로 코드를 작성하도록 하는 기준 문서
 
 ---
@@ -602,16 +602,38 @@ Phase 13~16은 로컬 Kubernetes 구현을 운영 학습 환경으로 확장하�
 ### CI workflow 규칙
 
 - GitHub Actions workflow는 `.github/workflows/` 아래에 둔다.
-- PR 기준 CI는 최소한 의존성 pin 검증, 서비스별 pytest, 정적 검사, Docker build 검증,
-  `kustomize build` 검증을 포함한다.
+- 기존 `validate-pinned-versions.yml`은 `requirements/constraints.txt`의 PyPI pin 존재 여부를
+  계속 검증한다.
+- PR 기준 종합 CI는 `.github/workflows/ci.yml`에 두고, `main`과 `feat/**` 대상 pull request에서
+  실행한다.
+- PR 기준 CI는 최소한 서비스별 pytest, Ruff, Black, mypy smoke check, Docker build 검증,
+  `kustomize build` 검증, Gitleaks, pip-audit, Bandit, kube-linter를 포함한다.
 - CI는 클러스터에 직접 배포하지 않는다. `kubectl apply`, Helm upgrade, Argo CD sync 실행은
   GitOps phase의 명시적 배포 흐름에서만 다룬다.
 - 서비스별 테스트는 실제 `services/<service-name>/tests/`가 있는 서비스만 실행한다. 테스트가 없는
   서비스는 CI에서 실패시키지 말고, References 문서에 테스트 공백으로 기록한다.
 - Python 버전은 프로젝트 기준인 3.12를 사용한다.
+- mypy는 여러 서비스의 `app` 패키지를 한 번에 검사하지 않는다. 서비스들이 동일한 top-level package
+  이름을 사용하므로 `shared`를 먼저 검사하고, 각 서비스 디렉터리에서 `app`을 개별 검사한다.
+- 현재 mypy는 엄격한 타입 보장보다 명백한 타입 오류를 막는 smoke check 용도로 사용한다.
+  서비스별 타입 품질이 올라가면 `ignore_missing_imports`와 `strict` 옵션을 단계적으로 강화한다.
 - Docker build는 레포 루트를 build context로 사용한다.
+- local Kustomize overlay 검증 시 실제 secret 파일을 Git에 커밋하지 않는다. CI runner 내부에서만
+  `.env.example`을 복사하고 임시 JWT key를 생성한 뒤 `kustomize build`를 실행한다.
+- kube-linter는 source YAML이 아니라 Kustomize 렌더링 결과를 대상으로 실행한다. 렌더링은
+  `security-gates` job에서 한 번만 수행해 중복 검증을 피한다.
+- Bandit은 `services`, `shared`, `scripts`를 검사하되 `tests`와 `alembic`은 제외한다. 초기 실패
+  기준은 medium 이상 severity다.
+- pip-audit는 취약한 dependency가 발견되면 기본적으로 고정 버전을 업그레이드한다. 예외가 필요하면
+  vulnerability ID, 사유, 만료 기준을 Phase References 문서에 기록한다.
+- pip-audit는 constraints 파일만이 아니라 서비스별 requirements 설치 결과도 검사한다. extras 기반
+  transitive dependency가 누락되지 않도록 installed environment audit을 유지한다.
 - workflow가 민감값을 필요로 하면 GitHub Actions secrets를 사용하고, secret 값을 로그에 출력하지
   않는다.
+- workflow 권한은 필요한 최소 권한으로 제한한다. Phase 14 PR CI 기준 권한은 `contents: read`와
+  Gitleaks PR commit 조회를 위한 `pull-requests: read`다.
+- 외부 GitHub Action은 mutable tag 대신 full commit SHA로 고정한다. checkout step은 기본 동작에
+  의존하지 않고 `persist-credentials: false`를 명시한다.
 
 ### GitOps / CD 규칙
 

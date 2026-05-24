@@ -1,6 +1,7 @@
 import base64
 
 import structlog
+from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicKey
 from cryptography.hazmat.primitives.serialization import load_pem_public_key
 from fastapi import HTTPException, status
 from jose import JWTError
@@ -197,11 +198,18 @@ def get_jwks_service() -> dict:
     settings = get_settings()
 
     public_key = load_pem_public_key(settings.jwt_public_key.encode())
-    pub_numbers = (
-        public_key.public_key().public_numbers()
-        if hasattr(public_key, "public_key")
-        else public_key.public_numbers()
-    )
+    if not isinstance(public_key, RSAPublicKey):
+        key_type = type(public_key).__name__
+        logger.error(
+            "JWT 공개키 타입 불일치",
+            jwt_algorithm=settings.jwt_algorithm,
+            key_type=key_type,
+        )
+        raise RuntimeError(
+            f"JWT public key must be RSA for {settings.jwt_algorithm}; got {key_type}"
+        )
+
+    pub_numbers = public_key.public_numbers()
 
     def _int_to_base64url(n: int) -> str:
         byte_length = (n.bit_length() + 7) // 8

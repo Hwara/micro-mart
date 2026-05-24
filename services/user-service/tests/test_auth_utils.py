@@ -37,7 +37,12 @@ def test_decode_access_token_rejects_invalid_signature() -> None:
     """서명이 변조된 access token은 decode 단계에서 거부되는지 확인한다."""
     settings = get_settings()
     token = jwt.encode({"sub": "1"}, settings.jwt_private_key, algorithm=settings.jwt_algorithm)
-    tampered = f"{token[:-1]}x"
+    signed_payload, signature = token.rsplit(".", 1)
+    assert signature
+
+    # 서명 검증 실패를 확인하기 위해 payload/header는 유지하고 signature만 변조한다.
+    replacement = "A" if signature[0] != "A" else "B"
+    tampered = f"{signed_payload}.{replacement}{signature[1:]}"
 
     with pytest.raises(JWTError):
         auth_utils.decode_access_token(tampered)

@@ -1,6 +1,6 @@
 # MicroMart — 서비스 기능 정의 문서
 
-> 최종 갱신일: 2026-05-20
+> 최종 갱신일: 2026-05-24
 > 목적: 서비스별 책임, 엔드포인트, 내부 동작, 서비스 간 호출 계약을 구현 전에 명확히 고정하기 위한 기능 정의 문서
 
 ---
@@ -830,22 +830,33 @@ Prometheus Alertmanager와 Grafana/Loki 알림 규칙은 MicroMart의 장애 학
 
 #### 역할
 
-GitHub Actions CI는 PR 단계에서 문서, 의존성 pin, Python 테스트, 정적 검사, Docker build,
-Kubernetes manifest 조합 가능성을 검증한다. CI는 클러스터에 직접 배포하지 않는다.
+GitHub Actions CI는 PR 단계에서 의존성 pin, Python 테스트, 정적 검사, Docker build,
+Kubernetes manifest 조합 가능성, 보안/품질 게이트를 검증한다. CI는 클러스터에 직접 배포하지
+않으며, 이미지 push, `kubectl apply`, Helm upgrade, Argo CD sync를 수행하지 않는다.
 
 #### 검증 범위
 
 | 범위 | 기준 |
 | ---- | ---- |
-| 의존성 | `requirements/constraints.txt`의 모든 패키지 버전 pin 검증 |
-| Python 서비스 | 서비스별 `tests/`가 있는 경우 pytest 실행 |
-| 정적 검사 | 루트 `pyproject.toml` 기준 Ruff/Black/mypy 적용 |
+| 의존성 | 기존 `validate-pinned-versions.yml`로 `requirements/constraints.txt`의 모든 패키지 버전 pin 검증 |
+| Python 서비스 | `api-gateway`, `user-service`, `product-service`, `order-service`, `payment-service`, `notification-service` pytest 실행 |
+| 정적 검사 | 루트 `pyproject.toml` 기준 Ruff/Black 적용, mypy는 `shared`와 서비스별 `app` 패키지를 독립 실행 |
 | Docker build | 서비스별 Dockerfile이 레포 루트 build context에서 빌드 가능한지 확인 |
-| Kubernetes | `kustomize build k8s/services/overlays/local` 조합 확인 |
+| Kubernetes | CI runner 내부에서 dummy secret/JWT key를 만든 뒤 `kustomize build k8s/services/overlays/local` 실행 |
+| Secret scan | Gitleaks로 repository 전체 secret scan 수행 |
+| Dependency CVE | pip-audit로 `requirements/constraints.txt` 기준 취약점 검사 |
+| Python security | Bandit으로 `services`, `shared`, `scripts` 검사. `tests`, `alembic`은 제외하고 medium 이상을 실패 기준으로 사용 |
+| Kubernetes lint | kube-linter로 Kustomize 렌더링 결과 검사 |
 
 #### 설계 의도
 
-- 기존 `validate-pinned-versions.yml`은 유지하거나 확장하되, workflow 책임이 커지면 파일을 분리한다.
+- 기존 `validate-pinned-versions.yml`은 유지하고, 종합 PR 검증은 `.github/workflows/ci.yml`로 분리한다.
+- workflow 권한은 `contents: read`, `pull-requests: read`로 제한한다. Gitleaks Action은 PR commit 목록
+  조회를 위해 pull request read 권한이 필요하다.
+- local overlay의 실제 secret 파일은 Git에 커밋하지 않는다. CI에서는 runner 내부에서만 example 파일을
+  복사하고 임시 JWT key를 생성한다.
+- Kustomize build는 kube-linter 입력 manifest 생성 단계에서 한 번만 수행한다. 렌더링 실패도
+  `security-gates` job 실패로 드러난다.
 - CI 실패 원인과 재현 명령은 `docs/references/ci-reference.md`에 기록한다.
 - CI는 배포 권한을 갖지 않으며, 배포는 Phase 15의 GitOps 경로에서 처리한다.
 

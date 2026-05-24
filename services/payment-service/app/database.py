@@ -6,7 +6,7 @@ Redis는 payment-service에서 불필요하므로 포함하지 않음.
 """
 
 from collections.abc import AsyncGenerator
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -22,14 +22,14 @@ def _engine_options(
     debug: bool,
     pool_size: int,
     max_overflow: int,
-) -> dict:
+) -> dict[str, Any]:
     """
     SQLAlchemy async engine 옵션을 DB 드라이버에 맞게 구성한다.
 
     SQLite 테스트 엔진은 pool_size/max_overflow를 지원하지 않으므로 제외하고,
     PostgreSQL 운영/로컬 엔진에는 커넥션 풀 옵션을 유지한다.
     """
-    options = {
+    options: dict[str, Any] = {
         "echo": debug,
         "pool_pre_ping": True,
     }

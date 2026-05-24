@@ -17,7 +17,7 @@ LGTM(Loki, Grafana, Tempo, Prometheus) 관찰성 스택을 깊이 학습하기 �
 | ------ | ------ | ------ |
 | 언어 / 프레임워크 | Python 3.12 + FastAPI 0.136.1 | 코드량 최소화, OpenTelemetry SDK 성숙도 높음 |
 | 데이터 검증 / 설정 | Pydantic 2.13.4 + pydantic-settings 2.14.0 | 요청/응답 검증, 환경변수 타입 검증 |
-| ASGI 기반 | Starlette 0.52.1 | FastAPI 기반 ASGI 런타임 |
+| ASGI 기반 | Starlette 1.0.1 | FastAPI 기반 ASGI 런타임 |
 | ORM | SQLAlchemy 2.0 async | 비동기 DB 세션, Mapped 타입 안전성 |
 | DB 마이그레이션 | Alembic 1.18.4 | 서비스별 PostgreSQL schema 변경 이력 관리 |
 | 로깅 | structlog 25.5.0 | JSON 구조화 로그, traceId/spanId 자동 주입 |
@@ -420,7 +420,7 @@ Secret 관리, Terraform remote backend를 구성하는 학습용 최소형 EKS 
 | JWT 위조/만료 | 잘못된 토큰 전달 | `gateway_auth_failure_total{reason="expired\|invalid"}` |
 | JWKS 캐시 미스 | user-service 재기동 또는 키 로테이션 | `gateway_jwks_cache_total{result="miss"}` 증가 |
 | 알럿 발동 | 결제 지연/실패율, gateway 5xx/인증 실패, 주문 실패율/완료율, 재고 경합, 캐시 미스율, notification 실패, OTel 수집 중단 | Prometheus alert rule → Alertmanager Slack receiver → Grafana 대시보드 패널 확인 |
-| CI 실패 | 테스트 실패, 버전 pin 누락, Docker build 실패, kustomize build 실패 | GitHub Actions job 로그와 실패 단계 확인 |
+| CI 실패 | 테스트 실패, 버전 pin 누락, Ruff/Black/mypy 실패, Docker build 실패, kustomize build 실패, secret/CVE/security lint 실패 | GitHub Actions job 로그와 실패 단계 확인 |
 | GitOps sync drift | 클러스터에서 수동으로 Deployment/ConfigMap 변경 | Argo CD OutOfSync 상태와 diff 확인 후 Git 기준으로 복구 |
 | AWS 배포 관찰 | Terraform으로 EKS/RDS/ElastiCache 배포 후 서비스 트래픽 발생 | CloudWatch/EKS 상태, Grafana 대시보드, 서비스 health probe 확인 |
 
@@ -430,6 +430,12 @@ Secret 관리, Terraform remote backend를 구성하는 학습용 최소형 EKS 
 
 ```text
 micro-mart/
+├── .github/
+│   ├── ISSUE_TEMPLATE/
+│   ├── PULL_REQUEST_TEMPLATE/
+│   └── workflows/
+│       ├── ci.yml
+│       └── validate-pinned-versions.yml
 ├── services/
 │   ├── api-gateway/
 │   │   ├── app/
@@ -565,7 +571,9 @@ micro-mart/
 │       ├── test_telemetry.py
 │       └── requirements.txt
 ├── scripts/
-│   └── generate_keys.py
+│   ├── generate_keys.py
+│   ├── image_build_push.bat
+│   └── validate_pinned_versions.py
 ├── docker/
 │   ├── init-scripts/
 │   │   └── init-db.sql
@@ -696,7 +704,7 @@ micro-mart/
 11. ✅ **Kubernetes 외부 노출** — MetalLB, Envoy Gateway, Gateway API로 api-gateway와 Grafana 노출
 12. ✅ **서비스별 DB 마이그레이션** — user/product/order/payment-service에 Alembic 초기 revision 추가
 13. ✅ **Alerting 알림** — Prometheus alert rule, Alertmanager Slack receiver, 로컬 학습용 빠른 감지 기준 정의
-14. ⏳ **CI** — GitHub Actions 기반 문서/의존성/테스트/이미지/Kustomize 검증 자동화
+14. ✅ **CI** — GitHub Actions 기반 의존성/테스트/정적 검사/이미지/Kustomize/보안 게이트 자동화
 15. ⏳ **GitOps 중심 CD** — Argo CD가 Git의 Kubernetes overlay를 클러스터에 동기화
 16. ⏳ **AWS Cloud + Terraform** — 학습용 최소형 EKS, RDS, ElastiCache, Secret, remote backend 설계 및 배포
 

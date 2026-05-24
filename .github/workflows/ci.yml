@@ -1,0 +1,214 @@
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - main
+      - "feat/**"
+
+permissions:
+  contents: read
+  pull-requests: read
+
+env:
+  PYTHON_VERSION: "3.12"
+
+jobs:
+  python-tests:
+    name: pytest (${{ matrix.service }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service:
+          - api-gateway
+          - user-service
+          - product-service
+          - order-service
+          - payment-service
+          - notification-service
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: |
+            requirements/*.txt
+            shared/telemetry/requirements.txt
+            services/${{ matrix.service }}/requirements.txt
+            services/${{ matrix.service }}/tests/requirements*.txt
+
+      - name: Install service and test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -c requirements/constraints.txt -r services/${{ matrix.service }}/requirements.txt
+          python -m pip install -c requirements/constraints.txt -r requirements/test-common.txt pytest-mock respx
+          if [ -f services/${{ matrix.service }}/tests/requirements.txt ]; then
+            python -m pip install -c requirements/constraints.txt -r services/${{ matrix.service }}/tests/requirements.txt
+          fi
+          if [ -f services/${{ matrix.service }}/tests/requirements-test.txt ]; then
+            python -m pip install -c requirements/constraints.txt -r services/${{ matrix.service }}/tests/requirements-test.txt
+          fi
+
+      - name: Run pytest
+        working-directory: services/${{ matrix.service }}
+        run: pytest -q
+
+  static-checks:
+    name: Static checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install static analysis tools
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install ruff==0.4.4 black==24.4.2 mypy==1.10.0
+
+      - name: Run Ruff
+        run: ruff check .
+
+      - name: Run Black check
+        run: black --check .
+
+      - name: Run mypy smoke check
+        run: |
+          mypy --config-file pyproject.toml shared
+          for service_dir in services/*; do
+            if [ -d "$service_dir/app" ]; then
+              (
+                cd "$service_dir"
+                mypy --config-file ../../pyproject.toml app
+              )
+            fi
+          done
+
+  docker-build:
+    name: Docker build (${{ matrix.service }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service:
+          - api-gateway
+          - user-service
+          - product-service
+          - order-service
+          - payment-service
+          - notification-service
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+
+      - name: Build service image
+        run: docker build -f services/${{ matrix.service }}/Dockerfile -t micro-mart/${{ matrix.service }}:ci .
+
+  dependency-audit:
+    name: pip-audit (${{ matrix.service }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service:
+          - api-gateway
+          - user-service
+          - product-service
+          - order-service
+          - payment-service
+          - notification-service
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: |
+            requirements/*.txt
+            shared/telemetry/requirements.txt
+            services/${{ matrix.service }}/requirements.txt
+
+      - name: Install service dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r services/${{ matrix.service }}/requirements.txt
+
+      - name: Run pip-audit on installed environment
+        uses: pypa/gh-action-pip-audit@1220774d901786e6f652ae159f7b6bc8fea6d266
+
+  security-gates:
+    name: Security gates
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Run Gitleaks secret scan
+        uses: gitleaks/gitleaks-action@dcedce43c6f43de0b836d1fe38946645c9c638dc
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Run pip-audit on constraints
+        uses: pypa/gh-action-pip-audit@1220774d901786e6f652ae159f7b6bc8fea6d266
+        with:
+          inputs: requirements/constraints.txt
+
+      - name: Run Bandit
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install bandit==1.7.10
+          bandit -r services shared scripts -x "*/tests/*,*/alembic/*" -ll
+
+      - name: Set up Kustomize
+        uses: imranismail/setup-kustomize@2ba527d4d055ab63514ba50a99456fc35684947f
+
+      - name: Create CI-only dummy Kubernetes secrets
+        run: |
+          for example_file in k8s/services/overlays/local/secrets/*.env.example; do
+            cp "$example_file" "${example_file%.example}"
+          done
+          mkdir -p k8s/services/overlays/local/secrets/keys
+          openssl genrsa -out k8s/services/overlays/local/secrets/keys/private.pem 2048
+          openssl rsa -in k8s/services/overlays/local/secrets/keys/private.pem \
+            -pubout -out k8s/services/overlays/local/secrets/keys/public.pem
+
+      - name: Render local Kubernetes overlay
+        run: |
+          mkdir -p k8s-rendered
+          kustomize build k8s/services/overlays/local > k8s-rendered/micro-mart-local.yaml
+
+      - name: Run kube-linter
+        uses: stackrox/kube-linter-action@87802a2f4e01abebb3ee3c67a3002fea71f6eae5
+        with:
+          directory: k8s-rendered

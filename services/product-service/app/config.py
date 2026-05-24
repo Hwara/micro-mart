@@ -61,4 +61,4 @@ class Settings(BaseSettings):
 # 환경변수를 매번 읽지 않아도 되므로 성능상 이점이 있음
 @lru_cache
 def get_settings() -> Settings:
-    return Settings()
+    return Settings()  # type: ignore[call-arg]
