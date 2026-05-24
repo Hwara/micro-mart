@@ -9,6 +9,9 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
+# This mirrors PyPI project name rules: letters, digits, dot, underscore, and hyphen.
+# They must start and end with an alphanumeric character, except single-char names.
+# Examples: "fastapi" and "opentelemetry-sdk" match; "-fastapi" and "fastapi-" do not.
 _PYPI_PROJECT_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*[A-Za-z0-9]$|^[A-Za-z0-9]$")
 
 
@@ -36,7 +39,9 @@ def _pypi_versions(package: str) -> set[str]:
 
     url = f"https://pypi.org/pypi/{package}/json"
     request = urllib.request.Request(url, headers={"User-Agent": "micro-mart-pin-validator"})
-    # package is validated above and the endpoint is fixed to HTTPS PyPI.
+    # B310 is safe here: the endpoint is fixed to HTTPS PyPI, the package name was
+    # validated above, no user-supplied host is accepted, TLS is enforced, and a
+    # timeout is set.
     with urllib.request.urlopen(request, timeout=15) as response:  # nosec B310
         payload = json.load(response)
     return set(payload.get("releases", {}))

@@ -1,5 +1,4 @@
 import base64
-from typing import cast
 
 import structlog
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicKey
@@ -198,7 +197,18 @@ def get_jwks_service() -> dict:
     """
     settings = get_settings()
 
-    public_key = cast(RSAPublicKey, load_pem_public_key(settings.jwt_public_key.encode()))
+    public_key = load_pem_public_key(settings.jwt_public_key.encode())
+    if not isinstance(public_key, RSAPublicKey):
+        key_type = type(public_key).__name__
+        logger.error(
+            "JWT 공개키 타입 불일치",
+            jwt_algorithm=settings.jwt_algorithm,
+            key_type=key_type,
+        )
+        raise RuntimeError(
+            f"JWT public key must be RSA for {settings.jwt_algorithm}; got {key_type}"
+        )
+
     pub_numbers = public_key.public_numbers()
 
     def _int_to_base64url(n: int) -> str:

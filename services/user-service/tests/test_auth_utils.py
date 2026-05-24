@@ -38,6 +38,9 @@ def test_decode_access_token_rejects_invalid_signature() -> None:
     settings = get_settings()
     token = jwt.encode({"sub": "1"}, settings.jwt_private_key, algorithm=settings.jwt_algorithm)
     signed_payload, signature = token.rsplit(".", 1)
+    assert signature
+
+    # 서명 검증 실패를 확인하기 위해 payload/header는 유지하고 signature만 변조한다.
     replacement = "A" if signature[0] != "A" else "B"
     tampered = f"{signed_payload}.{replacement}{signature[1:]}"
 
