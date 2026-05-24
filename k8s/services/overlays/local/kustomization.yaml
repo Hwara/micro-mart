@@ -1,51 +1,51 @@
 resources:
-  - namespace.yaml
-  - ../../base
+- namespace.yaml
+- ../../base
 
 namespace: micro-mart-local
 
 images:
-  - name: api-gateway
-    newName: 172.25.46.10:32000/api-gateway
-    newTag: 77b0b68ac7e8
-  - name: notification-service
-    newName: 172.25.46.10:32000/notification-service
-    newTag: 77b0b68ac7e8
-  - name: order-service
-    newName: 172.25.46.10:32000/order-service
-    newTag: 77b0b68ac7e8
-  - name: payment-service
-    newName: 172.25.46.10:32000/payment-service
-    newTag: 77b0b68ac7e8
-  - name: product-service
-    newName: 172.25.46.10:32000/product-service
-    newTag: 77b0b68ac7e8
-  - name: user-service
-    newName: 172.25.46.10:32000/user-service
-    newTag: 77b0b68ac7e8
+- name: api-gateway
+  newName: 172.25.46.10:32000/api-gateway
+  newTag: c133ef178de7
+- name: notification-service
+  newName: 172.25.46.10:32000/notification-service
+  newTag: c133ef178de7
+- name: order-service
+  newName: 172.25.46.10:32000/order-service
+  newTag: c133ef178de7
+- name: payment-service
+  newName: 172.25.46.10:32000/payment-service
+  newTag: c133ef178de7
+- name: product-service
+  newName: 172.25.46.10:32000/product-service
+  newTag: c133ef178de7
+- name: user-service
+  newName: 172.25.46.10:32000/user-service
+  newTag: c133ef178de7
 
 patches:
-  - path: patches/image-pull-policy-always.yaml
+- path: patches/image-pull-policy-always.yaml
 
 configMapGenerator:
-  - envs:
-      - config/user-service.env
-    name: user-service-config
-  - envs:
-      - config/product-service.env
-    name: product-service-config
-  - envs:
-      - config/order-service.env
-    name: order-service-config
-  - envs:
-      - config/payment-service.env
-    name: payment-service-config
-  - envs:
-      - config/notification-service.env
-    name: notification-service-config
-  - envs:
-      - config/api-gateway.env
-    name: api-gateway-config
+- envs:
+  - config/user-service.env
+  name: user-service-config
+- envs:
+  - config/product-service.env
+  name: product-service-config
+- envs:
+  - config/order-service.env
+  name: order-service-config
+- envs:
+  - config/payment-service.env
+  name: payment-service-config
+- envs:
+  - config/notification-service.env
+  name: notification-service-config
+- envs:
+  - config/api-gateway.env
+  name: api-gateway-config
 
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
