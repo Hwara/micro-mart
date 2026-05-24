@@ -47,13 +47,13 @@ jobs:
       - name: Install service and test dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -r services/${{ matrix.service }}/requirements.txt
+          python -m pip install -c requirements/constraints.txt -r services/${{ matrix.service }}/requirements.txt
           python -m pip install -c requirements/constraints.txt -r requirements/test-common.txt pytest-mock respx
           if [ -f services/${{ matrix.service }}/tests/requirements.txt ]; then
-            python -m pip install -r services/${{ matrix.service }}/tests/requirements.txt
+            python -m pip install -c requirements/constraints.txt -r services/${{ matrix.service }}/tests/requirements.txt
           fi
           if [ -f services/${{ matrix.service }}/tests/requirements-test.txt ]; then
-            python -m pip install -r services/${{ matrix.service }}/tests/requirements-test.txt
+            python -m pip install -c requirements/constraints.txt -r services/${{ matrix.service }}/tests/requirements-test.txt
           fi
 
       - name: Run pytest
