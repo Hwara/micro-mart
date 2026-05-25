@@ -839,12 +839,12 @@ Kubernetes manifest 조합 가능성, 보안/품질 게이트를 검증한다. C
 | 범위 | 기준 |
 | ---- | ---- |
 | 의존성 | 기존 `validate-pinned-versions.yml`로 `requirements/constraints.txt`의 모든 패키지 버전 pin 검증 |
-| Python 서비스 | `api-gateway`, `user-service`, `product-service`, `order-service`, `payment-service`, `notification-service` pytest 실행 |
+| Python 서비스 | `api-gateway`, `user-service`, `product-service`, `order-service`, `payment-service`, `notification-service` pytest 실행. Alembic setup 검증은 `requirements/migration.txt`를 설치한 테스트 환경에서 수행 |
 | 정적 검사 | 루트 `pyproject.toml` 기준 Ruff/Black 적용, mypy는 `shared`와 서비스별 `app` 패키지를 독립 실행 |
-| Docker build | 서비스별 Dockerfile이 레포 루트 build context에서 빌드 가능한지 확인 |
+| Docker build | `docker/services.yaml` Compose build로 `web-common-base`, `db-common-base`와 서비스 이미지 build graph 확인 |
 | Kubernetes | Secret 원문 없이 `kustomize build k8s/services/overlays/local` 실행 |
 | Secret scan | Gitleaks로 repository 전체 secret scan 수행 |
-| Dependency CVE | pip-audit로 `requirements/constraints.txt` 기준 취약점 검사 |
+| Dependency CVE | pip-audit로 서비스 테스트 환경과 `requirements/constraints.txt` pin 기준 취약점 검사 |
 | Python security | Bandit으로 `services`, `shared`, `scripts` 검사. `tests`, `alembic`은 제외하고 medium 이상을 실패 기준으로 사용 |
 | Kubernetes lint | kube-linter로 Kustomize 렌더링 결과 검사 |
 
@@ -858,6 +858,8 @@ Kubernetes manifest 조합 가능성, 보안/품질 게이트를 검증한다. C
 - Kustomize build는 kube-linter 입력 manifest 생성 단계에서 한 번만 수행한다. 렌더링 실패도
   `security-gates` job 실패로 드러난다.
 - CI 실패 원인과 재현 명령은 `docs/references/ci-reference.md`에 기록한다.
+- Docker CI는 개별 Dockerfile만 분리 검증하지 않고 Compose build graph를 기준으로 공통 base 이미지와 서비스 이미지의 연결을 함께 확인한다.
+- Alembic은 앱 runtime 이미지에 포함하지 않으며, 마이그레이션 명령과 Alembic 관련 테스트는 host/dev/CI 환경에서 `requirements/migration.txt`를 추가 설치해 실행한다.
 - CI는 배포 권한을 갖지 않으며, 배포는 Phase 15의 GitOps 경로에서 처리한다.
 
 ### 6.3 Phase 15 — GitOps 중심 CD

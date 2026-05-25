@@ -28,7 +28,7 @@ LGTM(Loki, Grafana, Tempo, Prometheus) 관찰성 스택을 깊이 학습하기 �
 | Rate Limiting | SlowAPI | IP 기반, FastAPI 통합 용이, 인메모리 저장소 |
 | JWT 검증 | PyJWT + cryptography | RS256 공개키 검증, python-jose 대비 유지보수 활성화 |
 | 관찰성 SDK | OpenTelemetry 1.41.1 / instrumentation 0.62b1 | OTLP trace/metric/log 수집, FastAPI/SQLAlchemy/httpx 자동 계측 |
-| 컨테이너 | Docker | 서비스별 독립 Dockerfile |
+| 컨테이너 | Docker | 공통 runtime base 이미지 + 서비스별 Dockerfile |
 | 오케스트레이션 | Kubernetes | 관찰성 스택 Helm 배포 환경 |
 | 부하 생성 | k6 | 시나리오 스크립트, Grafana 연동 |
 
@@ -579,6 +579,9 @@ micro-mart/
 │   ├── apply_local_k8s_secrets.sh
 │   └── validate_pinned_versions.py
 ├── docker/
+│   ├── base/
+│   │   ├── db-common.Dockerfile
+│   │   └── web-common.Dockerfile
 │   ├── init-scripts/
 │   │   └── init-db.sql
 │   ├── infra.yaml
@@ -653,9 +656,12 @@ micro-mart/
 │       └── notification-service.md
 ├── pyproject.toml
 ├── requirements/
+│   ├── db-common.txt
+│   ├── migration.txt
 │   ├── constraints.txt
 │   ├── service-common.txt
-│   └── test-common.txt
+│   ├── test-common.txt
+│   └── web-common.txt
 ├── .pre-commit-config.yaml
 └── README.md
 ```
