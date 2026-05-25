@@ -83,6 +83,8 @@ flowchart LR
 ## DB 마이그레이션
 
 `user-service`, `product-service`, `order-service`, `payment-service`는 각 서비스 폴더에 독립적인 Alembic 설정과 migration history를 둡니다.
+애플리케이션 런타임 이미지는 Alembic을 포함하지 않으므로, migration은 host/dev/CI 환경에서 명시적으로 실행합니다.
+로컬 Kubernetes PostgreSQL에 적용하는 절차는 [`k8s/db/README.md`](k8s/db/)를 참고하세요.
 
 ## 로컬 실행
 
@@ -132,6 +134,9 @@ TAG=local
 ```bash
 docker compose -f docker/services.yaml build
 ```
+
+서비스 Dockerfile은 공통 base 이미지를 Compose `additional_contexts`로 주입받으므로,
+`docker build -f services/.../Dockerfile .` 형태의 단독 빌드는 지원하지 않습니다.
 
 배포
 

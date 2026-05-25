@@ -1,7 +1,4 @@
 -c ../../requirements/constraints.txt
--r ../../requirements/service-common.txt
+-r ../../requirements/db-common.txt
 
 redis
-
-# DB migration
-alembic

@@ -5,7 +5,10 @@ OpenTelemetry 초기화 모듈
 한 번 호출하면 FastAPI, SQLAlchemy, httpx의 계측이 자동으로 시작됩니다.
 """
 
+from __future__ import annotations
+
 import logging
+from typing import TYPE_CHECKING
 
 from fastapi import FastAPI
 from opentelemetry import metrics, trace
@@ -16,7 +19,6 @@ from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExport
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
 from opentelemetry.instrumentation.logging import LoggingInstrumentor
-from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
 from opentelemetry.sdk._logs import LoggerProvider
 from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
 from opentelemetry.sdk.metrics import MeterProvider
@@ -24,9 +26,11 @@ from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
-from sqlalchemy.ext.asyncio import AsyncEngine
 
 from shared.telemetry.config import TelemetrySettings, get_telemetry_settings
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncEngine
 
 
 def init_telemetry(
@@ -131,6 +135,8 @@ def init_telemetry(
     # SQLAlchemy: DB 쿼리마다 자동으로 Span 생성
     # db_engine이 없으면 건너뛰기 (api-gateway는 DB 없음)
     if db_engine is not None:
+        from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
+
         SQLAlchemyInstrumentor().instrument(engine=db_engine.sync_engine)
 
     logging.getLogger(__name__).info(

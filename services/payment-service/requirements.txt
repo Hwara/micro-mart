@@ -1,5 +1,2 @@
 -c ../../requirements/constraints.txt
--r ../../requirements/service-common.txt
-
-# DB migration
-alembic
+-r ../../requirements/db-common.txt

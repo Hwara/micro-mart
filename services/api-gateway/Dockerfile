@@ -1,36 +1,14 @@
-FROM python:3.12-slim-trixie AS builder
+# syntax=docker/dockerfile:1.7
 
-WORKDIR /build
-
-# api-gateway는 DB 없음 → libpq 불필요, httpx만 필요
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc \
-    && rm -rf /var/lib/apt/lists/*
-
-RUN python -m venv /app/venv
-ENV PATH="/app/venv/bin:$PATH"
+FROM web_common_base AS runtime
 
 COPY requirements/ /build/requirements/
-
-COPY shared/telemetry/requirements.txt /build/shared/telemetry/requirements.txt
-RUN pip install --no-cache-dir -r /build/shared/telemetry/requirements.txt
-
 COPY services/api-gateway/requirements.txt /build/services/api-gateway/requirements.txt
-RUN pip install --no-cache-dir -r /build/services/api-gateway/requirements.txt
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install -r /build/services/api-gateway/requirements.txt
 
-# ─────────────────────────────────────────────────────────
-FROM python:3.12-slim-trixie AS runtime
-
-WORKDIR /app
-
-COPY --from=builder /app/venv /app/venv
-ENV PATH="/app/venv/bin:$PATH"
-ENV PYTHONPATH=/app
-
-COPY shared/ /app/shared/
-COPY services/api-gateway/app /app/app
-
-RUN useradd -r -u 10001 -s /bin/false appuser && chown -R 10001:10001 /app
+COPY --chown=10001:10001 shared/ /app/shared/
+COPY --chown=10001:10001 services/api-gateway/app /app/app
 USER 10001:10001
 
 EXPOSE 8000

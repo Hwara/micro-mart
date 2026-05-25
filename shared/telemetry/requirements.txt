@@ -1,25 +1,5 @@
 -c ../../requirements/constraints.txt
+-r ../../requirements/web-common.txt
 
-# OTel 코어
-opentelemetry-sdk
-opentelemetry-exporter-otlp-proto-grpc
-
-# 자동 계측 — FastAPI/SQLAlchemy/httpx 결합 허용
-opentelemetry-instrumentation-fastapi
-opentelemetry-instrumentation-sqlalchemy
-opentelemetry-instrumentation-httpx
-opentelemetry-instrumentation-logging
-
-# 위 계측 라이브러리의 실제 대상 (명시적으로 선언)
-fastapi
-sqlalchemy[asyncio]
-httpx
-
-# FastAPI의 기반 프레임워크 (middleware.py에서 직접 사용)
-starlette
-
-# 설정 관리
-pydantic-settings
-
-# 구조화 로깅
-structlog
+# shared.telemetry는 DB가 없는 서비스에서도 import 가능해야 한다.
+# SQLAlchemy 계측 의존성은 requirements/db-common.txt에서만 설치한다.

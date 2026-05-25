@@ -1,5 +1,5 @@
 -c ../../requirements/constraints.txt
--r ../../requirements/service-common.txt
+-r ../../requirements/db-common.txt
 
 pydantic[email]
 
@@ -14,6 +14,3 @@ bcrypt==4.0.1
 
 # Redis (Refresh Token 저장, redis.asyncio는 redis 기본 패키지에 포함)
 redis
-
-# DB 마이그레이션
-alembic
