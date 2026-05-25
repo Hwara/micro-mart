@@ -627,18 +627,20 @@ Phase 13~16은 로컬 Kubernetes 구현을 운영 학습 환경으로 확장하�
   계속 검증한다.
 - PR 기준 종합 CI는 `.github/workflows/ci.yml`에 두고, `main`과 `feat/**` 대상 pull request에서
   실행한다.
-- PR 기준 CI는 최소한 서비스별 pytest, Ruff, Black, mypy smoke check, Docker build 검증,
+- PR 기준 CI는 최소한 서비스별 pytest, shared pytest, Ruff, Black, mypy smoke check, Docker build 검증,
   `kustomize build` 검증, Gitleaks, pip-audit, Bandit, kube-linter를 포함한다.
 - CI는 클러스터에 직접 배포하지 않는다. `kubectl apply`, Helm upgrade, Argo CD sync 실행은
   GitOps phase의 명시적 배포 흐름에서만 다룬다.
 - 서비스별 테스트는 실제 `services/<service-name>/tests/`가 있는 서비스만 실행한다. 테스트가 없는
   서비스는 CI에서 실패시키지 말고, References 문서에 테스트 공백으로 기록한다.
+- `shared/telemetry`처럼 서비스 디렉터리 밖에 있는 공통 모듈 테스트는 repository root에서 별도 CI step 또는 job으로 실행한다.
 - Python 버전은 프로젝트 기준인 3.12를 사용한다.
 - mypy는 여러 서비스의 `app` 패키지를 한 번에 검사하지 않는다. 서비스들이 동일한 top-level package
   이름을 사용하므로 `shared`를 먼저 검사하고, 각 서비스 디렉터리에서 `app`을 개별 검사한다.
 - 현재 mypy는 엄격한 타입 보장보다 명백한 타입 오류를 막는 smoke check 용도로 사용한다.
   서비스별 타입 품질이 올라가면 `ignore_missing_imports`와 `strict` 옵션을 단계적으로 강화한다.
-- Docker build는 레포 루트를 build context로 사용한다.
+- Docker build는 레포 루트를 build context로 사용하되, 공식 검증 경로는 `docker compose -f docker/services.yaml build`다.
+  서비스 Dockerfile은 Compose `additional_contexts`로 전달되는 common base 이미지를 전제로 하므로 단독 `docker build -f services/.../Dockerfile .` 방식은 지원하지 않는다.
 - local Kustomize overlay 검증 시 실제 secret 파일을 Git에 커밋하지 않는다. local overlay는
   고정 이름 Secret을 참조하므로 CI runner는 Secret 원문 없이 `kustomize build`를 실행할 수 있다.
 - kube-linter는 source YAML이 아니라 Kustomize 렌더링 결과를 대상으로 실행한다. 렌더링은

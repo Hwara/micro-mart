@@ -61,6 +61,33 @@ jobs:
         working-directory: services/${{ matrix.service }}
         run: pytest -q
 
+  shared-tests:
+    name: pytest (shared)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: |
+            requirements/*.txt
+            shared/telemetry/requirements.txt
+
+      - name: Install shared test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r shared/telemetry/requirements.txt
+          python -m pip install -c requirements/constraints.txt -r requirements/test-common.txt
+
+      - name: Run shared tests
+        run: pytest -q shared/telemetry
+
   static-checks:
     name: Static checks
     runs-on: ubuntu-latest

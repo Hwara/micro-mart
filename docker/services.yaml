@@ -12,6 +12,8 @@
 # [빌드 컨텍스트 주의]
 # 모든 서비스는 레포지토리 루트(.)를 context로 사용합니다.
 # shared/telemetry를 COPY하려면 루트 컨텍스트가 반드시 필요합니다.
+# 서비스 Dockerfile은 공통 base 이미지를 Compose additional_contexts로 주입받으므로
+# docker build -f services/.../Dockerfile . 형태의 단독 빌드는 지원하지 않습니다.
 
 networks:
   # infra.yaml, observability.yaml과 동일한 네트워크 공유

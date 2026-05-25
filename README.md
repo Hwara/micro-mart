@@ -135,6 +135,9 @@ TAG=local
 docker compose -f docker/services.yaml build
 ```
 
+서비스 Dockerfile은 공통 base 이미지를 Compose `additional_contexts`로 주입받으므로,
+`docker build -f services/.../Dockerfile .` 형태의 단독 빌드는 지원하지 않습니다.
+
 배포
 
 ```bash
