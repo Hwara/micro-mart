@@ -7,22 +7,22 @@ namespace: micro-mart-local
 images:
 - name: api-gateway
   newName: 172.25.46.10:32000/api-gateway
-  newTag: 95f02e999224
+  newTag: 7682eb40f2e9
 - name: notification-service
   newName: 172.25.46.10:32000/notification-service
-  newTag: 95f02e999224
+  newTag: 7682eb40f2e9
 - name: order-service
   newName: 172.25.46.10:32000/order-service
-  newTag: 95f02e999224
+  newTag: 7682eb40f2e9
 - name: payment-service
   newName: 172.25.46.10:32000/payment-service
-  newTag: 95f02e999224
+  newTag: 7682eb40f2e9
 - name: product-service
   newName: 172.25.46.10:32000/product-service
-  newTag: 95f02e999224
+  newTag: 7682eb40f2e9
 - name: user-service
   newName: 172.25.46.10:32000/user-service
-  newTag: 95f02e999224
+  newTag: 7682eb40f2e9
 
 patches:
 - path: patches/image-pull-policy-always.yaml
