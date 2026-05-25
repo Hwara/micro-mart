@@ -20,11 +20,31 @@ networks:
     external: true
 
 services:
+  # ── common build bases ──────────────────────────────────
+  # 앱 컨테이너로 실행하지 않는 build-only 이미지입니다.
+  # 앱 서비스 Dockerfile의 FROM web_common_base/db_common_base는
+  # additional_contexts의 service:<name> 참조로 이 이미지들을 사용합니다.
+  web-common-base:
+    scale: 0
+    build:
+      context: ..
+      dockerfile: docker/base/web-common.Dockerfile
+    image: ${REGISTRY:-172.25.46.10:32000}/web-common-base:${TAG:-local}
+
+  db-common-base:
+    scale: 0
+    build:
+      context: ..
+      dockerfile: docker/base/db-common.Dockerfile
+    image: ${REGISTRY:-172.25.46.10:32000}/db-common-base:${TAG:-local}
+
   # ── user-service ────────────────────────────────────────
   user-service:
     build:
       context: .. # 레포 루트 기준
       dockerfile: services/user-service/Dockerfile
+      additional_contexts:
+        db_common_base: service:db-common-base
     image: ${REGISTRY:-172.25.46.10:32000}/user-service:${TAG:-local}
     container_name: micromart-user-service
     env_file:
@@ -54,6 +74,8 @@ services:
     build:
       context: ..
       dockerfile: services/product-service/Dockerfile
+      additional_contexts:
+        db_common_base: service:db-common-base
     image: ${REGISTRY:-172.25.46.10:32000}/product-service:${TAG:-local}
     container_name: micromart-product-service
     env_file:
@@ -77,6 +99,8 @@ services:
     build:
       context: ..
       dockerfile: services/order-service/Dockerfile
+      additional_contexts:
+        db_common_base: service:db-common-base
     image: ${REGISTRY:-172.25.46.10:32000}/order-service:${TAG:-local}
     container_name: micromart-order-service
     env_file:
@@ -100,6 +124,8 @@ services:
     build:
       context: ..
       dockerfile: services/payment-service/Dockerfile
+      additional_contexts:
+        db_common_base: service:db-common-base
     image: ${REGISTRY:-172.25.46.10:32000}/payment-service:${TAG:-local}
     container_name: micromart-payment-service
     env_file:
@@ -123,6 +149,8 @@ services:
     build:
       context: ..
       dockerfile: services/notification-service/Dockerfile
+      additional_contexts:
+        web_common_base: service:web-common-base
     image: ${REGISTRY:-172.25.46.10:32000}/notification-service:${TAG:-local}
     container_name: micromart-notification-service
     env_file:
@@ -145,6 +173,8 @@ services:
     build:
       context: ..
       dockerfile: services/api-gateway/Dockerfile
+      additional_contexts:
+        web_common_base: service:web-common-base
     image: ${REGISTRY:-172.25.46.10:32000}/api-gateway:${TAG:-local}
     container_name: micromart-api-gateway
     env_file:

@@ -1,0 +1,6 @@
+-c constraints.txt
+-r web-common.txt
+
+sqlalchemy[asyncio]
+asyncpg
+opentelemetry-instrumentation-sqlalchemy

@@ -120,15 +120,20 @@ services/<service-name>/
 
 - Python 패키지 버전 고정은 루트 `requirements/constraints.txt`를 기준으로 한다.
 - 서비스별 `requirements.txt`는 직접 버전을 고정하지 않고, 가능하면 아래 공통 파일을 참조한다.
-  - `requirements/service-common.txt`: FastAPI, SQLAlchemy, httpx, OpenTelemetry, structlog 등 서비스 공통 런타임 의존성
+  - `requirements/web-common.txt`: FastAPI, httpx, DB-free OpenTelemetry, structlog 등 DB가 없어도 필요한 런타임 의존성
+  - `requirements/db-common.txt`: `web-common` + SQLAlchemy, asyncpg, SQLAlchemy 계측 등 DB 보유 서비스 런타임 의존성
+  - `requirements/migration.txt`: Alembic migration 명령/테스트 전용 의존성
+  - `requirements/service-common.txt`: 과거 호환용 파일. 새 Dockerfile과 새 서비스에서는 사용하지 않는다.
   - `requirements/test-common.txt`: pytest, pytest-asyncio, httpx, aiosqlite 등 테스트 공통 의존성
 - 서비스 고유 의존성만 각 서비스의 `requirements.txt`에 추가한다.
   - 예: user-service의 `redis`, `passlib`, `python-jose`
   - 예: product-service의 `redis`
   - 예: order-service의 `nats-py`
-  - 예: DB 보유 서비스의 `alembic`
+- Alembic은 앱 runtime 이미지에 포함하지 않는다. migration 명령과 Alembic 설정 테스트는 host/dev/CI 환경에서
+  `requirements/migration.txt`를 추가 설치해 실행한다.
 - 새 의존성을 추가할 때는 먼저 `constraints.txt`에 버전을 고정한 뒤, 필요한 common 또는 서비스별 requirements에 이름만 추가한다.
 - Dockerfile에서는 레포 루트의 `requirements/` 디렉터리를 먼저 복사한 뒤 서비스별 requirements를 설치한다.
+- DB가 없는 서비스는 `web-common`, DB 보유 서비스는 `db-common` 기반 이미지를 사용한다.
 - 버전 업그레이드가 발생하면 `docs/micromart_design.md`의 기술 스택 표와 관련 References 문서를 함께 갱신한다.
 
 ---
@@ -494,10 +499,17 @@ headers = {
 ## 20. Docker Compose / Kubernetes 로컬 실행 규칙
 
 - 서비스 Dockerfile은 레포 루트를 build context로 전제한다.
-- Dockerfile은 `requirements/`와 `shared/telemetry/requirements.txt`를 먼저 복사한 뒤 서비스별 `requirements.txt`를 설치한다.
+- 공통 런타임 의존성은 `docker/base/web-common.Dockerfile`과 `docker/base/db-common.Dockerfile`에서 먼저 설치한다.
+  서비스 Dockerfile은 Compose `additional_contexts`로 전달되는 `web_common_base` 또는 `db_common_base`를 `FROM`으로 사용한다.
+- Dockerfile의 `pip install`과 `apt-get install`은 BuildKit cache mount를 사용한다. pip 설치에는 `--no-cache-dir`를 쓰지 않는다.
+  cache mount 내용은 최종 이미지 레이어에 포함되지 않는다.
+- `apt-get` cache mount는 Compose 병렬 빌드를 고려해 `sharing=locked`를 사용한다.
+- Dockerfile은 `requirements/`를 먼저 복사한 뒤 서비스별 `requirements.txt`를 설치한다.
 - Docker build context에는 `.pytest_cache`, `.ruff_cache`, `.mypy_cache`, `.pip-audit-cache`,
   `__pycache__` 같은 로컬 캐시 디렉터리를 포함하지 않는다.
 - 런타임 이미지는 `/app`을 작업 디렉터리로 사용하고 `PYTHONPATH=/app`을 설정한다.
+- 애플리케이션 컨테이너는 non-root UID/GID `10001`로 실행한다. 이미지 크기 증가를 막기 위해
+  `/app/venv` 전체를 `chown -R`하지 말고, 서비스 소스와 shared 소스만 `COPY --chown=10001:10001`로 복사한다.
 - 로컬 통합 실행은 Compose 파일을 역할별로 나누어 사용한다.
   - `docker/infra.yaml`: PostgreSQL, Redis, NATS
   - `docker/observability.yaml`: OTel Collector, Prometheus, Loki, Tempo, Grafana

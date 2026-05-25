@@ -1,0 +1,14 @@
+-c constraints.txt
+
+fastapi
+uvicorn[standard]
+pydantic-settings
+httpx
+opentelemetry-sdk
+opentelemetry-exporter-otlp-proto-grpc
+opentelemetry-instrumentation-fastapi
+opentelemetry-instrumentation-httpx
+opentelemetry-instrumentation-logging
+structlog
+prometheus-client
+starlette

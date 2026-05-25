@@ -1,5 +1,5 @@
 -c ../../requirements/constraints.txt
--r ../../requirements/service-common.txt
+-r ../../requirements/web-common.txt
 
 PyJWT
 cryptography

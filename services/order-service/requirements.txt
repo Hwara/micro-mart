@@ -1,7 +1,4 @@
 -c ../../requirements/constraints.txt
--r ../../requirements/service-common.txt
+-r ../../requirements/db-common.txt
 
 nats-py
-
-# DB migration
-alembic
