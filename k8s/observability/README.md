@@ -11,6 +11,9 @@ kubectl create namespace micro-mart
 
 또는 `helm install` 실행할 때 `--create-namespace` 추가
 
+애플리케이션 서비스는 local overlay에서 `micro-mart-local` namespace를 사용한다.
+OTel Collector, PostgreSQL, Redis, NATS 같은 공용 인프라는 `micro-mart` namespace에 둔다.
+
 ## K8s Node Label 설정
 
 현재 Grafana 및 Tempo는 자원을 많이 소모하는 것을 확인해 (메모리 1Gi 이상) 따로 전용 노드에서 실행하기로 결정

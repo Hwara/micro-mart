@@ -9,6 +9,7 @@ dist/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+.pip-audit-cache/
 
 # 환경변수
 .env

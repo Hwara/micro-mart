@@ -377,8 +377,10 @@ Alertmanager는 Prometheus 알림 규칙을 받아 결제 지연/실패율, gate
 limit 급증, 주문 실패율과 완료율 저하, Saga 보상 트랜잭션 증가, 상품 재고 경합, 캐시 미스율 증가,
 notification 실패/지연, OTel 수집 중단을 Slack으로 알린다. NATS 연결 끊김은 현재 별도 Prometheus
 metric 없이 notification-service `/health.nats_connected=false`와 Loki warning 로그로 확인한다.
-GitHub Actions는 테스트와 이미지 빌드 검증을 담당하고, Argo CD는 Git에 선언된 Kubernetes overlay를
-클러스터 상태와 동기화한다. AWS 배포는 Terraform으로 VPC, EKS, RDS PostgreSQL, ElastiCache Redis,
+GitHub Actions는 테스트와 이미지 빌드 검증을 담당한다. Phase 15의 로컬 CD workflow는 WSL2 Ubuntu
+self-hosted runner에서 이미지를 `172.25.46.10:32000` registry로 push하고 local overlay image tag를
+commit SHA로 갱신한다. Argo CD는 Git에 선언된 Kubernetes overlay를 클러스터 상태와 동기화하되,
+로컬 환경에서는 Chaos 테스트 배포 타이밍을 통제하기 위해 manual sync를 기본으로 둔다. AWS 배포는 Terraform으로 VPC, EKS, RDS PostgreSQL, ElastiCache Redis,
 Secret 관리, Terraform remote backend를 구성하는 학습용 최소형 EKS 아키텍처를 기본값으로 한다.
 
 ### Loki 로그 필드
@@ -434,6 +436,7 @@ micro-mart/
 │   ├── ISSUE_TEMPLATE/
 │   ├── PULL_REQUEST_TEMPLATE/
 │   └── workflows/
+│       ├── cd-local-gitops.yml
 │       ├── ci.yml
 │       └── validate-pinned-versions.yml
 ├── services/
@@ -573,6 +576,7 @@ micro-mart/
 ├── scripts/
 │   ├── generate_keys.py
 │   ├── image_build_push.bat
+│   ├── apply_local_k8s_secrets.sh
 │   └── validate_pinned_versions.py
 ├── docker/
 │   ├── init-scripts/
@@ -583,6 +587,11 @@ micro-mart/
 │   └── .env.example
 ├── k8s/
 │   ├── README.md
+│   ├── argocd/
+│   │   ├── README.md
+│   │   ├── argocd-values.yaml
+│   │   ├── argocd-gateway.yaml
+│   │   └── argocd-http-route.yaml
 │   ├── db/
 │   │   ├── README.md
 │   │   ├── postgresql-config.yaml.example
@@ -623,6 +632,9 @@ micro-mart/
 │               ├── secrets/
 │               ├── namespace.yaml
 │               └── kustomization.yaml
+├── gitops/
+│   └── argocd-applications/
+│       └── micro-mart-local.yaml
 ├── docs/
 │   ├── dev_convention.md
 │   ├── service_function_definition.md
@@ -655,12 +667,16 @@ micro-mart/
 로컬 Kubernetes 배포는 애플리케이션, 인프라, 관찰성 스택을 분리해 관리한다.
 
 - 애플리케이션 서비스 6개는 `k8s/services/base/<service>/`에 `Deployment`, `Service`,
-  `kustomization.yaml`을 두고, `k8s/services/overlays/local/`에서 ConfigMap과 Secret을
-  생성해 조합한다.
+  `kustomization.yaml`을 두고, `k8s/services/overlays/local/`에서 ConfigMap, namespace,
+  image tag를 조합한다.
 - local overlay의 namespace는 `micro-mart-local`이다. base manifest에는 `micro-mart`가
   적혀 있지만 overlay가 최종 namespace를 덮어쓴다.
-- local overlay는 `172.25.46.10:32000/<service-name>:local` 이미지 주소를 사용한다.
-  이미지 registry나 태그를 바꾸면 overlay의 `images` 설정도 함께 바꾼다.
+- local Secret은 Git에 원문을 올리지 않고 `scripts/apply_local_k8s_secrets.sh`로 고정 이름의
+  Kubernetes Secret을 먼저 생성한다. Argo CD는 Secret 원문을 생성하지 않고, base Deployment가
+  이미 존재하는 Secret 이름을 참조한다.
+- local overlay는 기본 수동 배포에서는 `172.25.46.10:32000/<service-name>:local` 이미지 주소를
+  사용할 수 있고, Phase 15 CD workflow가 실행되면 `172.25.46.10:32000/<service-name>:<commit-sha>`
+  형태로 image tag가 갱신된다. 이미지 registry나 태그를 바꾸면 overlay의 `images` 설정도 함께 바꾼다.
 - 각 애플리케이션 Deployment는 `/health`를 liveness/readiness probe로 사용한다.
 - 애플리케이션 컨테이너는 non-root UID/GID `10001`로 실행하고,
   `readOnlyRootFilesystem`, privilege escalation 금지, capability drop,
@@ -683,6 +699,9 @@ micro-mart/
 - `api-gateway`는 `micro-mart-local` namespace의 `micro-mart-gateway`와
   `micro-mart-http-route`를 통해 외부에서 접근한다. Grafana는 `monitoring` namespace의
   `grafana-gateway`와 `grafana-http-route`를 통해 접근한다.
+- Argo CD UI는 `argocd` namespace에서 Helm으로 설치하고, `argocd-gateway`와
+  `argocd-http-route`로 HTTPS 노출한다. Gateway TLS에는 Helm chart의 Opaque `argocd-secret`을
+  직접 사용하지 않고 `kubernetes.io/tls` 타입 `argocd-gateway-tls` Secret을 별도로 둔다.
 - 외부 클라이언트용 애플리케이션 트래픽은 계속 `api-gateway`를 단일 진입점으로 사용한다.
   `payment-service`, `notification-service` 같은 내부 전용 서비스는 Gateway API로 직접
   노출하지 않는다.
@@ -699,13 +718,13 @@ micro-mart/
 6. ✅ **api-gateway** — JWT 검증 미들웨어(JWKS 캐시), 리버스 프록시, Rate Limiting, 관찰성 메트릭
 7. ✅ **로컬 통합 Compose** — infra/observability/services 분리 구성
 8. ✅ **notification-service** — NATS 소비, 알림 발송 시뮬레이션, 관찰성 메트릭
-9. ✅ **Kubernetes 매니페스트** — Deployment, Service, ConfigMap, Secret, local Kustomize overlay
+9. ✅ **Kubernetes 매니페스트** — Deployment, Service, ConfigMap, 고정 Secret 참조, local Kustomize overlay
 10. ✅ **k6 부하 스크립트** — Kubernetes local baseline 주문 생성 부하 시나리오 추가
 11. ✅ **Kubernetes 외부 노출** — MetalLB, Envoy Gateway, Gateway API로 api-gateway와 Grafana 노출
 12. ✅ **서비스별 DB 마이그레이션** — user/product/order/payment-service에 Alembic 초기 revision 추가
 13. ✅ **Alerting 알림** — Prometheus alert rule, Alertmanager Slack receiver, 로컬 학습용 빠른 감지 기준 정의
 14. ✅ **CI** — GitHub Actions 기반 의존성/테스트/정적 검사/이미지/Kustomize/보안 게이트 자동화
-15. ⏳ **GitOps 중심 CD** — Argo CD가 Git의 Kubernetes overlay를 클러스터에 동기화
+15. ✅ **GitOps 중심 CD** — WSL2 self-hosted runner 이미지 push, commit SHA tag 갱신, Argo CD manual sync
 16. ⏳ **AWS Cloud + Terraform** — 학습용 최소형 EKS, RDS, ElastiCache, Secret, remote backend 설계 및 배포
 
 ---

@@ -1,0 +1,15 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: micro-mart-local
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/Hwara/micro-mart.git
+    targetRevision: main
+    path: k8s/services/overlays/local
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: micro-mart-local
+  syncPolicy: {}
